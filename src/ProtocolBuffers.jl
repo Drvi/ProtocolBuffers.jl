@@ -9,8 +9,6 @@ using TOML
 #    * Allow the user to use inline string for specific message string fields
 #    * Allow the user to mark dict values and non-optional messages as Union{nothing,T} to
 #      be more resilient to cases when the sender sends an incomplete message etc.
-# - Always put julia code in modules, regardless of whether package is set (but see above) +
-#   make the JULIA_RESERVED_KEYWORDS less strict
 # - Codegen methods returing proto metadata about each message (one of fields, default values, reserved field numbers, extensions?)
 # - Services & RPC
 # - Extensions
