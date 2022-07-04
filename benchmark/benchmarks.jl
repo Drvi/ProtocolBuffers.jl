@@ -99,5 +99,4 @@ end
 
 
 # results = run(SUITE, verbose=true, seconds=30);
-# BenchmarkTools.save("params.json", params(SUITE));
-BenchmarkTools.loadparams!(SUITE, BenchmarkTools.load("benchmark/params.json")[1], :evals, :samples);
+# BenchmarkTools.save("tune.json", params(SUITE));
