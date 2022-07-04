@@ -96,7 +96,3 @@ for (field_type, jl_type) in (("sfixed32", Int32), ("sfixed64", Int64), ("fixed3
         SUITE["decode"]["repeated"][field_type][n] = @benchmarkable decode!(d, W, b, $(Val{:fixed})) evals=1 samples=10000 setup=(d=setup_decoder(rand($jl_type, $n), Val{:fixed}); b = $(BufferedVector{jl_type}()))
     end
 end
-
-
-results = run(SUITE, verbose=true, seconds=30)
-display(results)
