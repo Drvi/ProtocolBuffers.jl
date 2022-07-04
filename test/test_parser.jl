@@ -250,7 +250,7 @@ end
     @testset "Minimal proto file with package imports" begin
         s, p = translate_simple_proto("import \"path/to/a\";", Dict("path/to/a" => "package p;"), Options(always_use_modules=false))
         @test s == """
-        include("p/P_PB.jl")
+        include($(repr(joinpath("p", "P_PB.jl"))))
         import .P_PB
         import ProtocolBuffers as PB
         using ProtocolBuffers: OneOf
@@ -259,7 +259,7 @@ end
         s, p = translate_simple_proto("import \"path/to/a\";", Dict("path/to/a" => "package p;"), Options(always_use_modules=true))
         @test s == """
         module main_pb
-        include("p/P_PB.jl")
+        include($(repr(joinpath("p", "P_PB.jl"))))
         import .P_PB
         import ProtocolBuffers as PB
         using ProtocolBuffers: OneOf
