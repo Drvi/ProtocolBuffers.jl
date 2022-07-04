@@ -4,8 +4,8 @@ struct ResolvedProtoFile
     proto_file::ProtoFile
 end
 
-struct Options
-    always_use_modules::Bool
+Base.@kwdef struct Options
+    always_use_modules::Bool = true
 end
 
 proto_module_file_name(path::AbstractString) = string(proto_module_name(path), ".jl")
@@ -95,9 +95,6 @@ function get_upstream_dependencies!(file::ResolvedProtoFile, upstreams)
     end
 end
 
-# TODO: so far we're creating julia files that are not modules which are including their
-# dependencies. We should create the actual package files that would include translated files
-# in top-sorted order.
 function create_namespaced_packages(ns::NamespaceTrie, output_directory::AbstractString, parsed_files, options)
     path = joinpath(output_directory, ns.scope, "")
     if !isempty(ns.scope) # top level, not in a module
@@ -119,12 +116,8 @@ function create_namespaced_packages(ns::NamespaceTrie, output_directory::Abstrac
                         println(io, "import $(import_pkg_name)")
                     end
                 else
-                    # TODO: when we are importing files that do not live in a namespace, we
-                    # have to put them in a fake module and manually import them in the files
-                    # that require them.
-                    println(io, "# module ")
                     println(io, "include(", repr(namespaced_top_include(file)), ")")
-                    println(io, "# end # module ")
+                    options.always_use_modules && println(io, "module $(replace(proto_script_name(p), ".jl" => ""))")
                 end
             end
             !isempty(external_dependencies) && println(io)
