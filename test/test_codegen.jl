@@ -229,7 +229,7 @@ end
 
     @testset "Basic enum codegen" begin
         s, p, ctx = translate_simple_proto("enum A { a = 0; b = 1; }")
-        @test codegen_str(p.definitions["B"], ctx) == """
+        @test codegen_str(p.definitions["A"], ctx) == """
         @enumx A a=0 b=1
         """
     end
