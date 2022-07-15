@@ -6,6 +6,7 @@ function encode_condition(f::FieldType, ctx)
     end
 end
 _encode_condition(f::FieldType, ctx) = "x.$(jl_fieldname(f)) != $(jl_init_value(f, ctx))"
+_encode_condition(f::FieldType{<:MapType}, ctx) = "!isempty(x.$(jl_fieldname(f)))"
 function _encode_condition(f::FieldType{T}, ctx) where {T<:Union{StringType,BytesType}}
     default = get(f.options, "default", nothing)
     if default === nothing
