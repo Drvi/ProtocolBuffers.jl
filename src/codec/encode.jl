@@ -46,8 +46,13 @@ function _encode(io::IO, x::T) where {T<:Union{Enum{Int32},Enum{UInt32}}}
     return nothing
 end
 
-function _encode(io::IO, x::T, ::Type{Val{:fixed}}) where {T<:Union{Int32,Int64,Vector{Int32},Vector{Int64},UInt32,UInt64,Vector{UInt32},Vector{UInt64}}}
+function _encode(io::IO, x::Vector{T}, ::Type{Val{:fixed}}) where {T<:Union{Int32,Int64,UInt32,UInt64}}
     write(io, x)
+    return nothing
+end
+
+function _encode(io::IO, x::T, ::Type{Val{:fixed}}) where {T<:Union{Int32,Int64,UInt32,UInt64}}
+    _unsafe_write(io, Ref(x), Core.sizeof(x))
     return nothing
 end
 
@@ -64,8 +69,13 @@ function _encode(io::IO, x::Vector{T}, ::Type{Val{:zigzag}}) where {T<:Union{Int
     return nothing
 end
 
-function _encode(io::IO, x::T) where {T<:Union{Bool,Float32,Float64,String}}
+function _encode(io::IO, x::String)
     write(io, x)
+    return nothing
+end
+
+function _encode(io::IO, x::T) where {T<:Union{Bool,Float32,Float64}}
+    _unsafe_write(io, Ref(x), Core.sizeof(x))
     return nothing
 end
 
