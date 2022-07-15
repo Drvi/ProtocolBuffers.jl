@@ -17,7 +17,7 @@ using TOML
 
 
 const PACKAGE_VERSION = let
-    project = TOML.parsefile(joinpath(pkgdir(@__MODULE__), "Project.toml"))
+    project = TOML.parsefile(joinpath(@__DIR__, "..", "Project.toml"))
     VersionNumber(project["version"])
 end
 
@@ -44,7 +44,7 @@ import .Parsers
 import .CodeGenerators
 import .CodeGenerators: protojl
 import .Codecs
-import .Codecs: decode, decode!, encode, AbstractProtoDecoder, AbstractProtoEncoder, ProtoDecoder, BufferedVector, ProtoEncoder, message_done, try_eat_end_group, decode_tag, skip
+import .Codecs: decode, decode!, encode, AbstractProtoDecoder, AbstractProtoEncoder, ProtoDecoder, BufferedVector, ProtoEncoder, message_done, decode_tag, skip
 
 # For codegen/metadata_methods.jl
 """

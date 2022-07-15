@@ -1,3 +1,4 @@
+module TestDecode
 using ProtocolBuffers: Codecs
 import ProtocolBuffers as PB
 using .Codecs: decode, decode!, ProtoDecoder, BufferedVector
@@ -5,18 +6,14 @@ using Test
 using EnumX: @enumx
 
 # Without this, we'll get an invalid redefinition when re-running this file
-if !isdefined(@__MODULE__, :TestEnum)
-    @enumx TestEnum A B C
+@enumx TestEnum A B C
+struct TestInner
+    x::Int
+    r::Union{Nothing,TestInner}
 end
-if !isdefined(@__MODULE__, :TestStruct)
-    struct TestInner
-        x::Int
-        r::Union{Nothing,TestInner}
-    end
-    TestInner(x::Int) = TestInner(x, nothing)
-    struct TestStruct{T<:Union{Vector{UInt8},TestEnum.T,TestInner}}
-        oneof::Union{Nothing, PB.OneOf{T}}
-    end
+TestInner(x::Int) = TestInner(x, nothing)
+struct TestStruct{T<:Union{Vector{UInt8},TestEnum.T,TestInner}}
+    oneof::Union{Nothing, PB.OneOf{T}}
 end
 
 function PB.decode(d::PB.AbstractProtoDecoder, ::Type{TestInner})
@@ -31,7 +28,6 @@ function PB.decode(d::PB.AbstractProtoDecoder, ::Type{TestInner})
         else
             PB.skip(d, wire_type)
         end
-        PB.try_eat_end_group(d, wire_type)
     end
     return TestInner(x, r[])
 end
@@ -49,7 +45,6 @@ function PB.decode(d::PB.AbstractProtoDecoder, ::Type{<:TestStruct})
         else
             PB.skip(d, wire_type)
         end
-        PB.try_eat_end_group(d, wire_type)
     end
     return TestStruct(oneof)
 end
@@ -85,7 +80,7 @@ function test_decode(input_bytes, expected, V::Type=Nothing)
             skip(e.io, 1)
             x = BufferedVector{eltype(expected)}()
             while !eof(e.io)
-                tag, num = PB.decode_tag(e)
+                num, tag = PB.decode_tag(e)
                 decode!(e, x)
             end
             x = x[]
@@ -312,3 +307,4 @@ end
         end
     end
 end
+end # module
