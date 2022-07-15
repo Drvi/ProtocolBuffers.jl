@@ -10,7 +10,8 @@ using TOML
 # - configs for protojl:
 #    * Allow the user to use inline string for specific message string fields
 #    * Make Dicts robust to missing values where possible
-# - Groups
+# - Vendor proto definitions of common Julia types and dedicated methods for encode/decode
+#    * Int8, UInt8, Int16, UInt16, Int128, UInt128, Float16, UUID, Date, DateTime
 # - Services & RPC
 # - Extensions
 

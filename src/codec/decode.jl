@@ -238,6 +238,16 @@ function decode!(d::AbstractProtoDecoder, buffer::BufferedVector{T}) where {T}
     return nothing
 end
 
+function decode(d::AbstractProtoDecoder, ::Type{Ref{T}}, ::Type{Val{:group}}) where {T}
+    out = decode(GroupProtoDecoder(d.io), T)
+    return out
+end
+
+function decode!(d::AbstractProtoDecoder, buffer::BufferedVector{T}, ::Type{Val{:group}}) where {T}
+    buffer[] = decode(d, Ref{T}, Val{:group})
+    return nothing
+end
+
 # When the type signature on buffer was Base.RefValue{Union{T,Nothing}} where T,
 # Aqua was complaining about an unbound type parameter.
 function decode!(d::AbstractProtoDecoder, buffer::Base.RefValue{S}) where {S>:Nothing}
@@ -255,6 +265,25 @@ function decode!(d::AbstractProtoDecoder, buffer::Base.RefValue{T}) where {T}
         buffer[] = _merge_structs(buffer[], decode(d, Ref{T}))
     else
         buffer[] = decode(d, Ref{T})
+    end
+    return nothing
+end
+
+function decode!(d::AbstractProtoDecoder, buffer::Base.RefValue{S}, ::Type{Val{:group}}) where {S>:Nothing}
+    T = Core.Compiler.typesubtract(S, Nothing, 2)
+    if !isnothing(buffer[])
+        buffer[] = _merge_structs(getindex(buffer)::T, decode(d, Ref{T}, Val{:group}))
+    else
+        buffer[] = decode(d, Ref{T}, Val{:group})
+    end
+    return nothing
+end
+
+function decode!(d::AbstractProtoDecoder, buffer::Base.RefValue{T}, ::Type{Val{:group}}) where {T}
+    if isassigned(buffer)
+        buffer[] = _merge_structs(buffer[], decode(d, Ref{T}, Val{:group}))
+    else
+        buffer[] = decode(d, Ref{T}, Val{:group})
     end
     return nothing
 end
@@ -309,10 +338,10 @@ end
         bytelen = vbyte_decode(d.io, UInt32)
         skip(d.io, bytelen)
     elseif wire_type == START_GROUP
-        #TODO: this is not verified
-        # decode_tag(d)
-        bytelen = vbyte_decode(d.io, UInt32)
-        skip(d.io, bytelen)
+        while peek(d.io) != END_GROUP
+            skip(d, decode_tag(d)[2])
+        end
+        skip(d.io, 1)
     elseif wire_type == FIXED32
         skip(d.io, 4)
     else wire_type == END_GROUP

@@ -10,16 +10,21 @@ struct ProtoDecoder{I<:IO,F<:Function} <: AbstractProtoDecoder
 end
 message_done(d::ProtoDecoder) = d.message_done(d.io)
 ProtoDecoder(io::IO) = ProtoDecoder(io, eof)
-function try_eat_end_group(d::AbstractProtoDecoder, wire_type::WireType)
-    wire_type == START_GROUP && read(d.io, UInt8) # read end group
-    return nothing
-end
 
 struct LengthDelimitedProtoDecoder{I<:IO} <: AbstractProtoDecoder
     io::I
     endpos::Int
 end
 message_done(d::LengthDelimitedProtoDecoder) = d.endpos == position(d.io)
+
+struct GroupProtoDecoder{I<:IO} <: AbstractProtoDecoder
+    io::I
+end
+function message_done(d::GroupProtoDecoder)
+    done = peek(d.io) == END_GROUP
+    done && skip(d.io, 1)
+    return done
+end
 
 struct ProtoEncoder{I<:IO} <: AbstractProtoEncoder
     io::I

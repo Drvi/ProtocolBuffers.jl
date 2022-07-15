@@ -22,7 +22,7 @@ function _encode_condition(f::FieldType{ReferencedType}, ctx)
     end
 end
 
-field_encode_expr(f::GroupType, ctx) = "PB.encode(e, $(f.number), x.$(jl_fieldname(f)))"
+field_encode_expr(f::GroupType, ctx) = "PB.encode(e, $(f.number), x.$(jl_fieldname(f)), Val{:group})"
 function field_encode_expr(f::FieldType, ctx)
     if _is_repeated_field(f)
         encoding_val_type = _decoding_val_type(f.type)

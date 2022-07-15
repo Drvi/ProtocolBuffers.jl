@@ -257,10 +257,26 @@ end
 function encode(e::AbstractProtoEncoder, i::Int, x::T) where {T}
     _e = ProtoEncoder(IOBuffer(sizehint=sizeof(T)))
     encode_tag(e, i, LENGTH_DELIMITED)
-    encode(_e, x)
-    vbyte_encode(e.io, UInt32(position(_e.io)))
-    seekstart(_e.io)
-    write(e.io, _e.io)
-    close(_e.io)
+
+# Groups
+function encode(e::AbstractProtoEncoder, i::Int, x::Vector{T}, ::Type{Val{:group}}) where {T}
+    Base.ensureroom(e.io, length(x) * sizeof(T))
+    for el in x
+        encode_tag(e, i, START_GROUP)
+        encode(e, el)
+        vbyte_encode(e.io, END_GROUP)
+    end
     return nothing
 end
+
+function encode(e::AbstractProtoEncoder, i::Int, x::T, ::Type{Val{:group}}) where {T>:AbstractDict}
+    Base.ensureroom(e.io, sizeof(T))
+    encode_tag(e, i, START_GROUP)
+    encode(e, x)
+    vbyte_encode(e.io, END_GROUP)
+    return nothing
+end
+
+# Resolving a method ambiguity
+encode(::AbstractProtoEncoder, ::Int64, ::Dict{K, V}, ::Type{Val{:group}}) where {K, V} =
+    throw(MethodError(encode, (AbstractProtoEncoder, Int64, Dict{K, V} where {K, V}, Val{:group})))
