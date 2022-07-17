@@ -1,5 +1,8 @@
 module Codecs
 
+using BufferedStreams: BufferedOutputStream, BufferedInputStream
+using TranscodingStreams: TranscodingStream
+
 @enum(WireType::UInt32, VARINT=0, FIXED64=1, LENGTH_DELIMITED=2, START_GROUP=3, END_GROUP=4, FIXED32=5)
 
 abstract type AbstractProtoDecoder end
@@ -32,9 +35,7 @@ end
 
 zigzag_encode(x::T) where {T <: Integer} = xor(x << 1, x >> (8 * sizeof(T) - 1))
 zigzag_decode(x::T) where {T <: Integer} = xor(x >> 1, -(x & T(1)))
-_max_varint_size(::Type{T}) where {T} = (sizeof(T) + (sizeof(T) >> 2))
-_varint_size(x) = cld((8sizeof(x) - leading_zeros(x)), 7)
-_varint_size1(x) = max(1, _varint_size(x))
+
 
 mutable struct BufferedVector{T}
     elements::Vector{T}
@@ -55,7 +56,7 @@ _grow_by(::Type{T}) where {T<:Union{UInt32,UInt64,Int64,Int32,Enum{Int32},Enum{U
 _grow_by(::Type) = 16
 _grow_by(::Type{T}) where {T<:Union{Bool,UInt8}} = 64
 
-
+include("encoded_size.jl")
 include("vbyte.jl")
 include("decode.jl")
 include("encode.jl")
