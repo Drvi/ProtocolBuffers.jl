@@ -3,11 +3,17 @@ using JET
 using ProtocolBuffers
 using Test
 
+function is_ci()
+    get(ENV, "TRAVIS", "") == "true" ||
+    get(ENV, "APPVEYOR", "") in ("true", "True") ||
+    get(ENV, "CI", "") in ("true", "True")
+end
+
 include("unittests.jl")
 
 @testset "JET" begin
     include("jet_test_utils.jl")
-    jet_test_package(ProtocolBuffers)
+    is_ci() || jet_test_package(ProtocolBuffers)
     # jet_test_file("unittests.jl", ignored_modules=(JET.AnyFrameModule(Test),))
     include("test_perf.jl")
 end
