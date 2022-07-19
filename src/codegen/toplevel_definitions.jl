@@ -41,6 +41,7 @@ function generate_struct_field(io, field::GroupType, ctx::Context, type_params)
     type_param = get(type_params, field.name, nothing)
     if struct_name == type_name
         type_name = string("Union{Nothing,", type_name,"}")
+        # type_name = type_name
     elseif !isnothing(type_param)
         type_name = type_param.param
     elseif field.label == Parsers.OPTIONAL || field.label == Parsers.DEFAULT
