@@ -14,6 +14,7 @@ Base.position(x::BufferedStreams.BufferedOutputStream) = max(0, position(x.sink)
 # - Optimization pass (esp allocations in encode methods)
 # - Snoopi/Compilation latency pass
 # - configs for protojl:
+#    * Don't parametrize on OneOfs by default (hide behind a flag)
 #    * Allow the user to use inline string for specific message string fields
 #    * Make Dicts robust to missing values where possible
 # - Vendor proto definitions of common Julia types and dedicated methods for encode/decode
