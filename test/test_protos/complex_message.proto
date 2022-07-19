@@ -98,3 +98,6 @@ message OmniMessage {
     map<string, float> map_string_float_field = 80;
     map<string, double> map_string_double_field = 81;
 }
+
+message DuplicatedInnerMessage { uint32 x = 1; repeated uint32 y = 2; DuplicatedMessage r = 3; }
+message DuplicatedMessage { DuplicatedInnerMessage i = 1; }

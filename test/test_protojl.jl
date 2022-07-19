@@ -171,5 +171,16 @@ end
     @testset "IOStream" begin
         test_by_field(roundtrip_iostream(msg), msg)
     end
+
+    @testset "Duplicated messages" begin
+        io = IOBuffer()
+        e = ProtoEncoder(io)
+        encode(e, 1, DuplicatedInnerMessage(UInt32(42), UInt32[1, 2], DuplicatedMessage(DuplicatedInnerMessage(UInt32(42), UInt32[1, 2], nothing))))
+        encode(e, 1, DuplicatedInnerMessage(UInt32(43), UInt32[3, 4], DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[5, 6], nothing))))
+        seekstart(io)
+        x = decode(ProtoDecoder(io), DuplicatedMessage)
+        # TODO: recursively compare fields
+        # test_by_field(x, DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[1, 2, 3, 4], DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[1, 2, 5, 6], nothing)))))
+    end
 end
 end
