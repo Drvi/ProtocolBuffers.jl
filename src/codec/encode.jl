@@ -46,13 +46,13 @@ end
 end
 
 @inline function _with_size(f, io::IO, sink, x)
-    vbyte_encode(io, UInt32(encoded_size(x)))
+    vbyte_encode(io, UInt32(_encoded_size(x)))
     f(sink, x)
     return nothing
 end
 
 @inline function _with_size(f, io::IO, sink, x, V)
-    vbyte_encode(io, UInt32(encoded_size(x, V)))
+    vbyte_encode(io, UInt32(_encoded_size(x, V)))
     f(sink, x, V)
     return nothing
 end

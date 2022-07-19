@@ -55,15 +55,28 @@ end
 module TestComplexMessage
 using Test
 using ProtocolBuffers
+using TranscodingStreams
+using BufferedStreams
 
-function roundtrip(input)
+function roundtrip_iobuffer(input, f_in=identity, f_out=identity)
     io = IOBuffer()
-    e = ProtoEncoder(io)
-    d = ProtoDecoder(io)
+    e = ProtoEncoder(f_in(io))
     encode(e, input)
     seekstart(io)
-    roundtripped = decode(d, OmniMessage)
-    return roundtripped
+    d = ProtoDecoder(f_out(io))
+    return decode(d, OmniMessage)
+end
+
+function roundtrip_iostream(input, f_in=identity, f_out=identity)
+    (path, io) = mktemp()
+    e = ProtoEncoder(f_in(io))
+    encode(e, input)
+    close(io)
+    io = f_out(open(path, "r"))
+    d = ProtoDecoder(io)
+    out = decode(d, OmniMessage)
+    close(io)
+    return out
 end
 
 function test_by_field(actual::T, expected::T) where {T}
@@ -151,11 +164,12 @@ end
         Dict("K" => typemax(Float32)),
         Dict("K" => typemax(Float64)),
     )
-    @testset "roundtrip" begin
-        test_by_field(roundtrip(msg), msg)
+
+    @testset "IOBuffer" begin
+        test_by_field(roundtrip_iobuffer(msg), msg)
     end
-    @testset "roundtrip roundtrip" begin
-        test_by_field(roundtrip(roundtrip(msg)), msg)
+    @testset "IOStream" begin
+        test_by_field(roundtrip_iostream(msg), msg)
     end
 end
 end

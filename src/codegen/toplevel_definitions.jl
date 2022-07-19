@@ -112,6 +112,7 @@ function codegen(io, t::MessageType, ctx::Context)
     generate_decode_method(io, t, ctx)
     println(io)
     generate_encode_method(io, t, ctx)
+    generate__encoded_size_method(io, t, ctx)
 end
 
 codegen(io, t::GroupType, ctx::Context) = codegen(io, t.type, ctx)

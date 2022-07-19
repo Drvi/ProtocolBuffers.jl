@@ -68,8 +68,11 @@ end
 function print_field_encode_expr(io, fs::OneOfType, ctx)
     println(io, "    if isnothing(x.$(safename(fs)));")
     for f in fs.fields
-        println(io, "    elseif ", "x.$(safename(fs)).name == :", jl_fieldname(f))
-        println(io, "    " ^ 2, "PB.encode(e, $(f.number), x.$(safename(fs))[])")
+        V = _decoding_val_type(f.type)
+        V = isempty(V) ? "" : ", Val{$V}"
+        println(io, "    elseif ", "x.$(safename(fs)).name === :", jl_fieldname(f))
+        println(io, "    " ^ 2, "PB.encode(e, $(f.number), x.$(safename(fs))[]$V)")
+        println(io, "    " ^ 2, "PB.encode(e, $(f.number), x.$(safename(fs))[]$V)")
     end
     println(io, "    end")
 end
@@ -86,4 +89,51 @@ end
 
 function generate_encode_method(io, t::GroupType, ctx)
     generate_encode_method(io, t.type, ctx)
+end
+
+
+function print_field_encoded_size_expr(io, f::FieldType, ctx)
+    println(io, "    ", encode_condition(f, ctx), " && (encoded_size += ", field_encoded_size_expr(f), ')')
+end
+
+function print_field_encoded_size_expr(io, f::GroupType, ctx)
+    println(io, "    isnothing!($(jl_fieldname(f))) && (encoded_size += ", field_encoded_size_expr(f), ')')
+end
+
+function print_field_encoded_size_expr(io, fs::OneOfType, ctx)
+    println(io, "    if isnothing(x.$(safename(fs)));")
+    for f in fs.fields
+        V = _decoding_val_type(f.type)
+        V = isempty(V) ? "" : ", Val{$V}"
+        println(io, "    elseif ", "x.$(safename(fs)).name === :", jl_fieldname(f))
+        println(io, "    " ^ 2, "encoded_size += PB._encoded_size(x.$(safename(fs))[], $(f.number)$V)")
+    end
+    println(io, "    end")
+end
+
+field_encoded_size_expr(f::FieldType) = "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number))"
+field_encoded_size_expr(f::GroupType) = "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number))"
+field_encoded_size_expr(f::FieldType{<:AbstractProtoFixedType}) = "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number), Val{:fixed})"
+field_encoded_size_expr(f::FieldType{<:Union{SInt32Type,SInt64Type}}) = "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number), Val{:zigzag})"
+function field_encoded_size_expr(f::FieldType{<:MapType})
+    K = _decoding_val_type(f.type.keytype)
+    V = _decoding_val_type(f.type.valuetype)
+    isempty(V) && isempty(K) && return "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number))"
+    !isempty(V) && isempty(K) && return "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number), Val{Tuple{Nothing,$(V)}})"
+    isempty(V) && !isempty(K) && return "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number), Val{Tuple{$(K),Nothing}})"
+    return "PB._encoded_size(x.$(jl_fieldname(f)), $(f.number), Val{Tuple{$(K),$(V)}})"
+end
+
+function generate__encoded_size_method(io, t::MessageType, ctx)
+    println(io, "function PB._encoded_size(x::$(safename(t)))")
+    println(io, "    encoded_size = 0")
+    for field in t.fields
+        print_field_encoded_size_expr(io, field, ctx)
+    end
+    println(io, "    return encoded_size")
+    println(io, "end")
+end
+
+function generate__encoded_size_method(io, t::GroupType, ctx)
+    generate__encoded_size_method(io, t.type, ctx)
 end

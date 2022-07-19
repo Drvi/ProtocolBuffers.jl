@@ -1,7 +1,13 @@
 module ProtocolBuffers
 import EnumX
 import TranscodingStreams
+import BufferedStreams
 using TOML
+
+#TODO: This has to be removed, but is needed until
+#      https://github.com/JuliaIO/BufferedStreams.jl/pull/67
+#       is merged.
+Base.position(x::BufferedStreams.BufferedOutputStream) = max(0, position(x.sink) + x.position - 1)
 
 # TODO:
 # - Docs!
@@ -44,7 +50,7 @@ import .Parsers
 import .CodeGenerators
 import .CodeGenerators: protojl
 import .Codecs
-import .Codecs: decode, decode!, encode, AbstractProtoDecoder, AbstractProtoEncoder, ProtoDecoder, BufferedVector, ProtoEncoder, message_done, decode_tag, skip
+import .Codecs: decode, decode!, encode, AbstractProtoDecoder, AbstractProtoEncoder, ProtoDecoder, BufferedVector, ProtoEncoder, message_done, decode_tag, skip, _encoded_size
 
 # For codegen/metadata_methods.jl
 """
