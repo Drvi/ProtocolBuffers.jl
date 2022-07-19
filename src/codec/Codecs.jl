@@ -24,7 +24,7 @@ struct GroupProtoDecoder{I<:IO} <: AbstractProtoDecoder
     io::I
 end
 function message_done(d::GroupProtoDecoder)
-    done = peek(d.io) == END_GROUP
+    done = peek(d.io) == UInt8(END_GROUP)
     done && skip(d.io, 1)
     return done
 end

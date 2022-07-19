@@ -110,10 +110,16 @@ function test_decode(input_bytes, expected, V::Type=Nothing)
     @test x == expected
 end
 
-function test_decode_message(input_bytes, expected::TestStruct)
+function test_decode_message(input_bytes, expected::TestStruct, V=nothing)
     input_bytes = collect(input_bytes)
     e = ProtoDecoder(PipeBuffer(input_bytes))
-    x = decode(e, typeof(expected))
+    if isnothing(V)
+        x = decode(e, typeof(expected))
+    else
+        _, tag = PB.decode_tag(e)
+        @assert tag == Codecs.START_GROUP
+        x = decode(e, Ref{typeof(expected)}, V)
+    end
     @test x.oneof[] == expected.oneof[]
     @test typeof(x) === typeof(expected)
     @test typeof(x.oneof) === typeof(expected.oneof)
@@ -250,6 +256,13 @@ end
             test_decode_message([0x10, 0x02], TestStruct(PB.OneOf(:enum, TestEnum.C)))
             test_decode_message([0x1a, 0x02, 0x08, 0x02], TestStruct(PB.OneOf(:struct, TestInner(2))))
             test_decode_message([0x1a, 0x06, 0x08, 0x02, 0x12, 0x02, 0x08, 0x03], TestStruct(PB.OneOf(:struct, TestInner(2, TestInner(3)))))
+        end
+
+        @testset "group message" begin
+            test_decode_message([0x03, 0x0a, 0x03, 0x31, 0x32, 0x33, 0x04], TestStruct(PB.OneOf(:bytes, collect(b"123"))), Val{:group})
+            test_decode_message([0x03, 0x10, 0x02, 0x04], TestStruct(PB.OneOf(:enum, TestEnum.C)), Val{:group})
+            test_decode_message([0x03, 0x1a, 0x02, 0x08, 0x02, 0x04], TestStruct(PB.OneOf(:struct, TestInner(2))), Val{:group})
+            test_decode_message([0x03, 0x1a, 0x06, 0x08, 0x02, 0x12, 0x02, 0x08, 0x03, 0x04], TestStruct(PB.OneOf(:struct, TestInner(2, TestInner(3)))), Val{:group})
         end
     end
 

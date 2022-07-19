@@ -301,7 +301,7 @@ function encode(e::AbstractProtoEncoder, i::Int, x::Vector{T}, ::Type{Val{:group
     for el in x
         encode_tag(e, i, START_GROUP)
         encode(e, el)
-        vbyte_encode(e.io, END_GROUP)
+        vbyte_encode(e.io, UInt32(END_GROUP))
     end
     return nothing
 end
@@ -310,7 +310,7 @@ function encode(e::AbstractProtoEncoder, i::Int, x::T, ::Type{Val{:group}}) wher
     maybe_ensure_room(e.io, sizeof(T))
     encode_tag(e, i, START_GROUP)
     encode(e, x)
-    vbyte_encode(e.io, END_GROUP)
+    vbyte_encode(e.io, UInt32(END_GROUP))
     return nothing
 end
 

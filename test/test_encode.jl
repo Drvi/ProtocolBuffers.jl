@@ -36,10 +36,22 @@ function PB.encode(e::PB.AbstractProtoEncoder, x::TestStruct)
     return position(e.io) - initpos
 end
 
-function test_encode_struct(input::TestStruct, i, expected)
+function test_encode_struct(input::TestStruct, i, expected, V=nothing)
     d = ProtoEncoder(IOBuffer())
-    encode(d, input)
+    is_group = !isnothing(V)
+    if is_group
+        encode(d, 0, input, V)
+    else
+        encode(d, input)
+    end
     bytes = take!(d.io)
+    if is_group
+        @testset "group tags" begin
+            @test first(bytes) == UInt8(Codecs.START_GROUP)
+            @test last(bytes) == UInt8(Codecs.END_GROUP)
+        end
+        bytes = bytes[2:end-1]
+    end
     tag = first(bytes)
     bytes = bytes[2:end]
     if !isa(input.oneof[], Enum)
@@ -244,6 +256,13 @@ end
             test_encode_struct(TestStruct(PB.OneOf(:struct, TestInner(2))), 3, [0x08, 0x02])
             test_encode_struct(TestStruct(PB.OneOf(:struct, TestInner(2, TestInner(3)))), 3, [0x08, 0x02, 0x12, 0x02, 0x08, 0x03])
         end
+
+        @testset "group message" begin
+            test_encode_struct(TestStruct(PB.OneOf(:bytes, collect(b"123"))), 1, b"123", Val{:group})
+            test_encode_struct(TestStruct(PB.OneOf(:enum, TestEnum.C)), 2, [0x02], Val{:group})
+            test_encode_struct(TestStruct(PB.OneOf(:struct, TestInner(2))), 3, [0x08, 0x02], Val{:group})
+            test_encode_struct(TestStruct(PB.OneOf(:struct, TestInner(2, TestInner(3)))), 3, [0x08, 0x02, 0x12, 0x02, 0x08, 0x03], Val{:group})
+        end
     end
 
     @testset "varint" begin
@@ -328,17 +347,6 @@ function PB._encoded_size(x::NonEmptyMessage)
     !isnothing(x.self_referential_field) && (encoded_size += PB._encoded_size(x.self_referential_field, 2))
     return encoded_size
 end
-
-f(x) = (io = IOBuffer(); PB.encode(PB.ProtoEncoder(io), x); b = take!(io); b .=> bitstring.(b))
-f(x, i::Int) = (io = IOBuffer(); PB.encode(PB.ProtoEncoder(io), i, x); b = take!(io); b .=> bitstring.(b))
-f(x, V) = (io = IOBuffer(); PB.encode(PB.ProtoEncoder(io), x, V); b = take!(io); b .=> bitstring.(b))
-f(x, i::Int, V) = (io = IOBuffer(); PB.encode(PB.ProtoEncoder(io), i, x, V); b = take!(io); b .=> bitstring.(b))
-
-_f(x) = (io = IOBuffer(); PB.Codecs._encode(io, x); b = take!(io); b .=> bitstring.(b))
-_f(x, V) = (io = IOBuffer(); PB.Codecs._encode(io, x, V); b = take!(io); b .=> bitstring.(b))
-
-
-
 
 @testset "_encoded_size" begin
     @test _encoded_size(UInt8[0xff]) == 1
