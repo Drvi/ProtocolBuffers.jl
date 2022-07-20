@@ -11,11 +11,11 @@ struct TestInner
     r::Union{Nothing,TestInner}
 end
 TestInner(x::Int) = TestInner(x, nothing)
-struct TestStruct{T<:Union{Vector{UInt8},TestEnum.T,TestInner}}
-    oneof::Union{Nothing, PB.OneOf{T}}
+struct TestStruct{T1<:Union{Nothing,PB.OneOf{<:Union{Vector{UInt8},TestEnum.T,TestInner}}}}
+    oneof::T1
 end
 
-function PB.decode(d::PB.AbstractProtoDecoder, ::Type{TestInner})
+function PB.decode(d::PB.AbstractProtoDecoder, ::Type{<:TestInner})
     x = 0
     r = Ref{Union{Nothing,TestInner}}(nothing)
     while !PB.message_done(d)
@@ -316,6 +316,33 @@ end
         @testset "fixed64" begin
             test_decode(reinterpret(UInt8, [UInt64(2)]), UInt64(2), Val{:fixed})
         end
+    end
+
+    @testset "skipping" begin
+        io = IOBuffer()
+        d = PB.ProtoDecoder(io)
+        e = PB.ProtoEncoder(io)
+        PB.encode(e, 3, UInt32(42)) # VARINT
+        PB.encode(e, 4, [UInt32(42)]) # LENGTH_DELIMITED
+        PB.encode(e, 5, Float64(42)) # FIXED64
+        PB.encode(e, 6, Float32(42)) # FIXED32
+        write(io, 0x03) # START_GROUP
+            PB.encode(e, 1, UInt32(42)) # VARINT
+            PB.encode(e, 2, [UInt32(42)]) # LENGTH_DELIMITED
+            PB.encode(e, 3, Float64(42)) # FIXED64
+            PB.encode(e, 4, Float32(42)) # FIXED32
+        write(io, 0x04) # END_GROUP
+        write(io, 0x03) # START_GROUP
+            write(io, 0x03) # START_GROUP
+                PB.encode(e, 1, UInt32(42)) # VARINT
+                PB.encode(e, 2, [UInt32(42)]) # LENGTH_DELIMITED
+                PB.encode(e, 3, Float64(42)) # FIXED64
+                PB.encode(e, 4, Float32(42)) # FIXED32
+            write(io, 0x04) # END_GROUP
+        write(io, 0x04) # END_GROUP
+        seekstart(io)
+
+        @test decode(d, TestInner) == TestInner(0)
     end
 end
 end # module

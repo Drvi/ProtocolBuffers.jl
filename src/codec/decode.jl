@@ -306,7 +306,7 @@ end
         bytelen = vbyte_decode(d.io, UInt32)
         skip(d.io, bytelen)
     elseif wire_type == START_GROUP
-        while peek(d.io) != END_GROUP
+        while peek(d.io) != UInt8(END_GROUP)
             skip(d, decode_tag(d)[2])
         end
         skip(d.io, 1)

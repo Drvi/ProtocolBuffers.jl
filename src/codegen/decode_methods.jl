@@ -88,7 +88,7 @@ jl_fieldname_deref(f::GroupType, ctx) = "$(jl_fieldname(f))[]"
 
 
 function generate_decode_method(io, t::MessageType, ctx)
-    println(io, "function PB.decode(d::PB.AbstractProtoDecoder, ::Type{$(safename(t))})")
+    println(io, "function PB.decode(d::PB.AbstractProtoDecoder, ::Type{<:$(safename(t))})")
     has_fields = !isempty(t.fields)
     for field in t.fields
         println(io, "    ", jl_fieldname(field), " = ", jl_init_value(field, ctx))

@@ -11,8 +11,8 @@ struct TestInner
     r::Union{Nothing,TestInner}
 end
 TestInner(x::Int) = TestInner(x, nothing)
-struct TestStruct{T<:Union{Vector{UInt8},TestEnum.T,TestInner}}
-    oneof::Union{Nothing, PB.OneOf{T}}
+struct TestStruct{T<:Union{Nothing,PB.OneOf{<:Union{Vector{UInt8},TestEnum.T,TestInner}}}}
+    oneof::T
 end
 
 function PB.encode(e::PB.AbstractProtoEncoder, x::TestInner)
