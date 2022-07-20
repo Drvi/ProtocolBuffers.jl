@@ -75,7 +75,7 @@ end
 function field_decode_expr(io, field::GroupType, i, ctx)
     field_name = jl_fieldname(field)
     println(io, "    " ^ 2, i == 1 ? "if " : "elseif ", "field_number == ", field.number)
-    println(io, "    " ^ 3, field_name, " = PB.decode!(d, ", field_name, ", Val{:group})")
+    println(io, "    " ^ 3, "PB.decode!(d, ", field_name, ", Val{:group})")
     return nothing
 end
 
@@ -84,6 +84,8 @@ function jl_fieldname_deref(f::FieldType{ReferencedType}, ctx)
     should_deref = _is_repeated_field(f) | _is_message(f.type, ctx)
     return should_deref ? "$(jl_fieldname(f))[]" : jl_fieldname(f)
 end
+jl_fieldname_deref(f::GroupType, ctx) = "$(jl_fieldname(f))[]"
+
 
 function generate_decode_method(io, t::MessageType, ctx)
     println(io, "function PB.decode(d::PB.AbstractProtoDecoder, ::Type{$(safename(t))})")

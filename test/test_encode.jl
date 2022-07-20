@@ -339,6 +339,7 @@ function PB._encoded_size(x::NonEmptyMessage)
 end
 
 @testset "_encoded_size" begin
+    @test _encoded_size(nothing) == 0
     @test _encoded_size(UInt8[0xff]) == 1
     @test _encoded_size("S") == 1
     @test _encoded_size(typemax(UInt32)) == 5

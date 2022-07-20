@@ -10,6 +10,7 @@ _varint_size1(x) = max(1, _varint_size(x))
 
 # For scalars, we can't be sure about their size as they could be omitted completely
 # (we're not sending default values over the wire)
+_encoded_size(x::Nothing) = 0 # this shouldn't really happen
 _encoded_size(x::T) where {T<:Union{Int32,UInt32,Int64,UInt64,Enum}} = _varint_size1(x)
 _encoded_size(x::T, ::Type{Val{:zigzag}}) where {T<:Union{UInt32,UInt64}} = _varint_size1(zigzag_encode(x))
 _encoded_size(x::T, ::Type{Val{:zigzag}}) where {T<:Union{Int32,Int64}} = _varint_size1(reinterpret(unsigned(T), zigzag_encode(x)))
@@ -51,3 +52,7 @@ _encoded_size(xs::AbstractString, i::Int) = _encoded_size(i << 3) + _with_size(_
 function _encoded_size(xs::Union{Float64,Float32,Int32,Int64,UInt64,UInt32,Bool,Enum}, i::Int)
     return _encoded_size(i << 3) + _encoded_size(xs)
 end
+
+_encoded_size(xs::AbstractArray, ::Type{Val{:group}}) = sum(x->_encoded_size(x) + 2, xs, init=0)
+_encoded_size(xs, i::Int, ::Type{Val{:group}}) = _encoded_size(i << 3) + _encoded_size(xs) + 2
+_encoded_size(xs::AbstractArray, i::Int, ::Type{Val{:group}})  = _encoded_size(i << 3) + _with_size(_encoded_size(xs, Val{:group}))

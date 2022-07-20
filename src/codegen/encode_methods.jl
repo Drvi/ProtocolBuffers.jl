@@ -62,7 +62,7 @@ function print_field_encode_expr(io, f::FieldType, ctx)
 end
 
 function print_field_encode_expr(io, f::GroupType, ctx)
-    println(io, "    isnothing!($(jl_fieldname(f))) && ", field_encode_expr(f, ctx))
+    println(io, "    !isnothing(x.$(jl_fieldname(f))) && ", field_encode_expr(f, ctx))
 end
 
 function print_field_encode_expr(io, fs::OneOfType, ctx)
@@ -71,7 +71,6 @@ function print_field_encode_expr(io, fs::OneOfType, ctx)
         V = _decoding_val_type(f.type)
         V = isempty(V) ? "" : ", Val{$V}"
         println(io, "    elseif ", "x.$(safename(fs)).name === :", jl_fieldname(f))
-        println(io, "    " ^ 2, "PB.encode(e, $(f.number), x.$(safename(fs))[]$V)")
         println(io, "    " ^ 2, "PB.encode(e, $(f.number), x.$(safename(fs))[]$V)")
     end
     println(io, "    end")
@@ -97,7 +96,7 @@ function print_field_encoded_size_expr(io, f::FieldType, ctx)
 end
 
 function print_field_encoded_size_expr(io, f::GroupType, ctx)
-    println(io, "    isnothing!($(jl_fieldname(f))) && (encoded_size += ", field_encoded_size_expr(f), ')')
+    println(io, "    !isnothing(x.$(jl_fieldname(f))) && (encoded_size += ", field_encoded_size_expr(f), ')')
 end
 
 function print_field_encoded_size_expr(io, fs::OneOfType, ctx)

@@ -79,11 +79,18 @@ function roundtrip_iostream(input, f_in=identity, f_out=identity)
     return out
 end
 
-function test_by_field(actual::T, expected::T) where {T}
-    for field in fieldnames(T)
-        @testset "$T.$field" begin
-            @test getfield(actual, field) == getfield(expected, field)
-        end
+function test_by_field(a, b)
+    @testset "$(typeof(a))" begin
+        _test_by_field(a, b)
+    end
+end
+
+function _test_by_field(a, b, name=string(typeof(a)))
+    N = fieldcount(typeof(a))
+    (N == 0 || a isa AbstractDict) && return (@testset "$name" begin @test a == b end)
+    for (i, n) in zip(1:N, fieldnames(typeof(a)))
+        absname = string(name, ".", String(n))
+        _test_by_field(getfield(a, i), getfield(b, i), absname)
     end
 end
 
@@ -163,6 +170,9 @@ end
         [typemax(Float64)],
         Dict("K" => typemax(Float32)),
         Dict("K" => typemax(Float64)),
+
+        var"OmniMessage.Group"(Int32(42)),
+        [var"OmniMessage.Repeated_group"(Int32(43))],
     )
 
     @testset "IOBuffer" begin
@@ -179,8 +189,7 @@ end
         encode(e, 1, DuplicatedInnerMessage(UInt32(43), UInt32[3, 4], DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[5, 6], nothing))))
         seekstart(io)
         x = decode(ProtoDecoder(io), DuplicatedMessage)
-        # TODO: recursively compare fields
-        # test_by_field(x, DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[1, 2, 3, 4], DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[1, 2, 5, 6], nothing)))))
+        test_by_field(x, DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[1, 2, 3, 4], DuplicatedMessage(DuplicatedInnerMessage(UInt32(43), UInt32[1, 2, 5, 6], nothing)))))
     end
 end
 end
