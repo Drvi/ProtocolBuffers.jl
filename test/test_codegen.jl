@@ -472,6 +472,9 @@ end
         @test CodeGenerators.jl_default_value(p.definitions["A"].fields[1], ctx) == "nothing"
         s, p, ctx = translate_simple_proto("message A { repeated A a = 1; }")
         @test CodeGenerators.jl_default_value(p.definitions["A"].fields[1], ctx) == "Vector{A}()"
+        s, p, ctx = translate_simple_proto("message A { group Aa = 1 { int32 b = 1; } }")
+        @test CodeGenerators.jl_default_value(p.definitions["A"].fields[1], ctx) == "nothing"
+
     end
 
     @testset "Initial values" begin
@@ -574,6 +577,8 @@ end
         @test CodeGenerators.jl_init_value(p.definitions["A"].fields[1], ctx) == "Dict{String,Int32}()"
         s, p, ctx = translate_simple_proto("message A { oneof a { int32 b = 1; } }")
         @test CodeGenerators.jl_init_value(p.definitions["A"].fields[1], ctx) == "nothing"
+        s, p, ctx = translate_simple_proto("message A { group Aa = 1 { int32 b = 1; } }")
+        @test CodeGenerators.jl_init_value(p.definitions["A"].fields[1], ctx) == "Ref{Union{Nothing,var\"A.Aa\"}}(nothing)"
     end
 
     @testset "Metadata methods" begin

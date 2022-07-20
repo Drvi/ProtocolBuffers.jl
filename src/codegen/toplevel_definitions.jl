@@ -15,22 +15,7 @@ function _should_force_required(qualified_name, ctx)
 end
 
 function generate_struct_field(io, field, ctx, type_params)
-    field_name = jl_fieldname(field)
-    type_name = jl_typename(field, ctx)
-    struct_name = ctx._toplevel_name[]
-    # When a field type is self-referential, we'll use Nothing to signal
-    # the bottom of the recursion. Note that we don't have to do this
-    # for repeated (`Vector{...}`) types; at this point `type_name`
-    # is already a vector if the field was repeated.
-    if struct_name == type_name
-        type_name = type_name
-    else
-        type_param = get(type_params, field.name, nothing)
-        if !isnothing(type_param)
-            type_name = type_param.param
-        end
-    end
-    println(io, "    ", field_name, "::", type_name)
+    println(io, "    ", jl_fieldname(field), "::", jl_typename(field, ctx))
 end
 
 function generate_struct_field(io, field::FieldType{ReferencedType}, ctx, type_params)
@@ -44,13 +29,33 @@ function generate_struct_field(io, field::FieldType{ReferencedType}, ctx, type_p
     type_param = get(type_params, field.name, nothing)
     if struct_name == type_name
         type_name = string("Union{Nothing,", type_name,"}")
-        # type_name = type_name
     elseif !isnothing(type_param)
-        # type_name = string("Union{Nothing,", type_param.param,"}")
         type_name = type_param.param
     elseif field.label == Parsers.OPTIONAL || field.label == Parsers.DEFAULT
         should_force_required = _should_force_required(string(struct_name, ".", field.name), ctx)
         if !should_force_required && _is_message(field.type, ctx)
+            type_name = string("Union{Nothing,", type_name,"}")
+        end
+    end
+    println(io, "    ", field_name, "::", type_name)
+end
+
+function generate_struct_field(io, field::GroupType, ctx, type_params)
+    field_name = jl_fieldname(field)
+    type_name = jl_typename(field, ctx)
+    struct_name = ctx._toplevel_name[]
+    # When a field type is self-referential, we'll use Nothing to signal
+    # the bottom of the recursion. Note that we don't have to do this
+    # for repeated (`Vector{...}`) types; at this point `type_name`
+    # is already a vector if the field was repeated.
+    type_param = get(type_params, field.name, nothing)
+    if struct_name == type_name
+        type_name = string("Union{Nothing,", type_name,"}")
+    elseif !isnothing(type_param)
+        type_name = type_param.param
+    elseif field.label == Parsers.OPTIONAL || field.label == Parsers.DEFAULT
+        should_force_required = _should_force_required(string(struct_name, ".", field.name), ctx)
+        if !should_force_required
             type_name = string("Union{Nothing,", type_name,"}")
         end
     end
