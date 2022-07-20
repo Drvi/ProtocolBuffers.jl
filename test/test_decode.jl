@@ -5,7 +5,6 @@ using .Codecs: decode, decode!, ProtoDecoder, BufferedVector
 using Test
 using EnumX: @enumx
 
-# Without this, we'll get an invalid redefinition when re-running this file
 @enumx TestEnum A B C
 struct TestInner
     x::Int
@@ -236,19 +235,14 @@ end
             @testset "string,sint32" begin test_decode([0x0a, 0x01, 0x61, 0x10, 0x02], Dict{String,Int32}("a" => 1), Val{Tuple{Nothing,:zigzag}}) end
             @testset "string,sint64" begin test_decode([0x0a, 0x01, 0x61, 0x10, 0x02], Dict{String,Int64}("a" => 1), Val{Tuple{Nothing,:zigzag}}) end
 
-            # @testset "string,repeated int32" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x01, 0x01], Dict{String,Vector{Int32}}("a" => [1])) end
-            # @testset "string,repeated int64" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x01, 0x01], Dict{String,Vector{Int64}}("a" => [1])) end
-            # @testset "string,repeated uint32" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x01, 0x01], Dict{String,Vector{UInt32}}("a" => [1])) end
-            # @testset "string,repeated uint64" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x01, 0x01], Dict{String,Vector{UInt64}}("a" => [1])) end
-            # @testset "string,repeated bool" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x01, 0x01], Dict{String,Vector{Bool}}("a" => [true])) end
 
-            # @testset "string,repeated sfixed32" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x04, 0x01, 0x00, 0x00, 0x00], Dict{String,Vector{Int32}}("a" => [1]), Val{Tuple{Nothing,:fixed}}) end
-            # @testset "string,repeated sfixed64" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Dict{String,Vector{Int64}}("a" => [1]), Val{Tuple{Nothing,:fixed}}) end
-            # @testset "string,repeated fixed32" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x04, 0x01, 0x00, 0x00, 0x00], Dict{String,Vector{UInt32}}("a" => [1]), Val{Tuple{Nothing,:fixed}}) end
-            # @testset "string,repeated fixed64" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Dict{String,Vector{UInt64}}("a" => [1]), Val{Tuple{Nothing,:fixed}}) end
+            @testset "sfixed32,sfixed32" begin test_decode([0x0d, 0x01, 0x00, 0x00, 0x00, 0x15, 0x01, 0x00, 0x00, 0x00], Dict{Int32,Int32}(1 => 1), Val{Tuple{:fixed,:fixed}}) end
+            @testset "sfixed64,sfixed64" begin test_decode([0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Dict{Int64,Int64}(1 => 1), Val{Tuple{:fixed,:fixed}}) end
+            @testset "fixed32,fixed32" begin test_decode([0x0d, 0x01, 0x00, 0x00, 0x00, 0x15, 0x01, 0x00, 0x00, 0x00], Dict{UInt32,UInt32}(1 => 1), Val{Tuple{:fixed,:fixed}}) end
+            @testset "fixed64,fixed64" begin test_decode([0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Dict{UInt64,UInt64}(1 => 1), Val{Tuple{:fixed,:fixed}}) end
 
-            # @testset "string,repeated sint32" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x01, 0x02], Dict{String,Vector{Int32}}("a" => [1]), Val{Tuple{Nothing,:zigzag}}) end
-            # @testset "string,repeated sint64" begin test_decode([0x0a, 0x01, 0x61, 0x12, 0x01, 0x02], Dict{String,Vector{Int64}}("a" => [1]), Val{Tuple{Nothing,:zigzag}}) end
+            @testset "sint32,sint32" begin test_decode([0x08, 0x02, 0x10, 0x02], Dict{Int32,Int32}(1 => 1), Val{Tuple{:zigzag,:zigzag}}) end
+            @testset "sint64,sint64" begin test_decode([0x08, 0x02, 0x10, 0x02], Dict{Int64,Int64}(1 => 1), Val{Tuple{:zigzag,:zigzag}}) end
         end
 
         @testset "message" begin

@@ -54,22 +54,6 @@ function decode!(d::AbstractProtoDecoder, buffer::Dict{K,V}) where {K,V}
     nothing
 end
 
-function decode!(d::AbstractProtoDecoder, buffer::Dict{K,Vector{V}}) where {K,V<:_ScalarTypes}
-    len = vbyte_decode(d.io, UInt32)
-    endpos = position(d.io) + len
-    vals_buffer = BufferedVector{V}()
-    while position(d.io) < endpos
-        field_number, wire_type = decode_tag(d)
-        key = decode(d, K)
-        field_number, wire_type = decode_tag(d)
-        decode!(d, wire_type, vals_buffer)
-        buffer[key] = copy(vals_buffer[])
-        empty!(vals_buffer)
-    end
-    @assert position(d.io) == endpos
-    nothing
-end
-
 for T in (:(:fixed), :(:zigzag))
     @eval function decode!(d::AbstractProtoDecoder, buffer::Dict{K,V}, ::Type{Val{Tuple{Nothing,$(T)}}}) where {K,V}
         len = vbyte_decode(d.io, UInt32)
@@ -80,22 +64,6 @@ for T in (:(:fixed), :(:zigzag))
             field_number, wire_type = decode_tag(d)
             val = decode(d, V, Val{$(T)})
             buffer[key] = val
-        end
-        @assert position(d.io) == endpos
-        nothing
-    end
-
-    @eval function decode!(d::AbstractProtoDecoder, buffer::Dict{K,Vector{V}}, ::Type{Val{Tuple{Nothing,$(T)}}}) where {K,V}
-        len = vbyte_decode(d.io, UInt32)
-        endpos = position(d.io) + len
-        vals_buffer = BufferedVector{V}()
-        while position(d.io) < endpos
-            field_number, wire_type = decode_tag(d)
-            key = decode(d, K)
-            field_number, wire_type = decode_tag(d)
-            decode!(d, wire_type, vals_buffer, Val{$(T)})
-            buffer[key] = copy(vals_buffer[])
-            empty!(vals_buffer)
         end
         @assert position(d.io) == endpos
         nothing

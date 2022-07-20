@@ -5,7 +5,6 @@ using .Codecs: encode, ProtoEncoder, WireType
 using Test
 using EnumX: @enumx
 
-# Without this, we'll get an invalid redefinition when re-running this file
 @enumx TestEnum A B C
 struct TestInner
     x::Int
@@ -235,19 +234,10 @@ end
             @testset "string,fixed32" begin test_encode(Dict{String,UInt32}("a" => 1), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x15, 0x01, 0x00, 0x00, 0x00], Val{Tuple{Nothing,:fixed}}) end
             @testset "string,fixed64" begin test_encode(Dict{String,UInt64}("a" => 1), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Val{Tuple{Nothing,:fixed}}) end
 
-            # @testset "string,repeated int32" begin test_encode(Dict{String,Vector{Int32}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x01, 0x01]) end
-            # @testset "string,repeated int64" begin test_encode(Dict{String,Vector{Int64}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x01, 0x01]) end
-            # @testset "string,repeated uint32" begin test_encode(Dict{String,Vector{UInt32}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x01, 0x01]) end
-            # @testset "string,repeated uint64" begin test_encode(Dict{String,Vector{UInt64}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x01, 0x01]) end
-            # @testset "string,repeated bool" begin test_encode(Dict{String,Vector{Bool}}("a" => [true]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x01, 0x01]) end
-
-            # @testset "string,repeated sfixed32" begin test_encode(Dict{String,Vector{Int32}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x04, 0x01, 0x00, 0x00, 0x00], Val{Tuple{Nothing,:fixed}}) end
-            # @testset "string,repeated sfixed64" begin test_encode(Dict{String,Vector{Int64}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Val{Tuple{Nothing,:fixed}}) end
-            # @testset "string,repeated fixed32" begin test_encode(Dict{String,Vector{UInt32}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x04, 0x01, 0x00, 0x00, 0x00], Val{Tuple{Nothing,:fixed}}) end
-            # @testset "string,repeated fixed64" begin test_encode(Dict{String,Vector{UInt64}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Val{Tuple{Nothing,:fixed}}) end
-
-            # @testset "string,repeated sint32" begin test_encode(Dict{String,Vector{Int32}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x01, 0x02], Val{Tuple{Nothing,:zigzag}}) end
-            # @testset "string,repeated sint64" begin test_encode(Dict{String,Vector{Int64}}("a" => [1]), 2, Codecs.LENGTH_DELIMITED, [0x0a, 0x01, 0x61, 0x12, 0x01, 0x02], Val{Tuple{Nothing,:zigzag}}) end
+            @testset "sfixed32,sfixed32" begin test_encode(Dict{Int32,Int32}(1 => 1), 2, Codecs.LENGTH_DELIMITED, [0x0d, 0x01, 0x00, 0x00, 0x00, 0x15, 0x01, 0x00, 0x00, 0x00], Val{Tuple{:fixed,:fixed}}) end
+            @testset "sfixed64,sfixed64" begin test_encode(Dict{Int64,Int64}(1 => 1), 2, Codecs.LENGTH_DELIMITED, [0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Val{Tuple{:fixed,:fixed}}) end
+            @testset "fixed32,fixed32" begin test_encode(Dict{UInt32,UInt32}(1 => 1), 2, Codecs.LENGTH_DELIMITED, [0x0d, 0x01, 0x00, 0x00, 0x00, 0x15, 0x01, 0x00, 0x00, 0x00], Val{Tuple{:fixed,:fixed}}) end
+            @testset "fixed64,fixed64" begin test_encode(Dict{UInt64,UInt64}(1 => 1), 2, Codecs.LENGTH_DELIMITED, [0x09, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], Val{Tuple{:fixed,:fixed}}) end
         end
 
         @testset "message" begin
@@ -368,7 +358,6 @@ end
     @test _encoded_size(EmptyMessage()) == 0
     #                                                                                                    T   D     T    L    T   D
     @test _encoded_size(NonEmptyMessage(typemax(UInt32), NonEmptyMessage(typemax(UInt32), nothing))) == (1 + 5) + (1 + (1 + (1 + 5)))
-
     @test _encoded_size([UInt8[0xff]]) == 2
     @test _encoded_size(["S"]) == 2
     @test _encoded_size([typemax(UInt32)]) == 5
@@ -388,6 +377,8 @@ end
     @test _encoded_size([EmptyMessage()]) == 1
     #                                                                                                     L    T   D     T    L    T   D
     @test _encoded_size([NonEmptyMessage(typemax(UInt32), NonEmptyMessage(typemax(UInt32), nothing))]) == 1 + (1 + 5) + (1 + (1 + (1 + 5)))
+    #                                                                                                                  S    T   D     T    L    T   D      E
+    @test _encoded_size([NonEmptyMessage(typemax(UInt32), NonEmptyMessage(typemax(UInt32), nothing))], Val{:group}) == 1 + (1 + 5) + (1 + (1 + (1 + 5))) + 1
     #                                                  T   L   D     T   L   D
     @test _encoded_size(Dict("K" => UInt8[0xff])) == ((1 + 1 + 1) + (1 + 1 + 1))
     @test _encoded_size(Dict("K" => "S"))         == ((1 + 1 + 1) + (1 + 1 + 1))
