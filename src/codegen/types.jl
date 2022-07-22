@@ -116,6 +116,7 @@ _get_type_bound(f::GroupType, ::Context) = string("Union{Nothing,", abstract_typ
 _get_type_bound(f::FieldType{MapType}, ::Context) = string("Union{Nothing,", abstract_type_name(f.type.valuetype.name), '}')
 function _get_type_bound(f::OneOfType, ctx::Context)
     seen = Dict{String,Nothing}()
+    struct_name = ctx._toplevel_name[]
     union_types = String[]
     for o in f.fields
         name = jl_typename(o.type, ctx)
@@ -124,11 +125,16 @@ function _get_type_bound(f::OneOfType, ctx::Context)
             nothing
         end
     end
+    should_force_required = _should_force_required(string(struct_name, ".", f.name), ctx)
     if length(union_types) == 1
-        return string("Union{Nothing,OneOf{", only(union_types), "}}")
+        type = string("OneOf{", only(union_types), '}')
     else
-        return string("Union{Nothing,OneOf{<:Union{", join(union_types, ','), "}}}")
+        type = string("OneOf{<:Union{", join(union_types, ','), "}}")
     end
+    if !should_force_required
+        type = string("Union{Nothing,", type, '}')
+    end
+    return type
 end
 
 function _maybe_subtype(name)
