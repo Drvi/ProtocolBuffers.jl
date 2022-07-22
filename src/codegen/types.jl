@@ -97,6 +97,9 @@ end
 _is_message(t::ReferencedType, ctx::Context) = _get_referenced_type_type!(t, ctx) == "message"
 _is_enum(t::ReferencedType, ctx::Context)    = _get_referenced_type_type!(t, ctx) == "enum"
 
+_is_cyclic_reference(t, ::Context) = false
+_is_cyclic_reference(t::ReferencedType, ctx::Context) = t.name in ctx.proto_file.cyclic_definitions || t.name == ctx._toplevel_name[]
+
 _needs_type_params(f::FieldType{ReferencedType}, ctx::Context) = f.type.name in ctx._curr_cyclic_defs && f.type.name != ctx._toplevel_name[]
 _needs_type_params(::FieldType, ctx::Context) = false
 _needs_type_params(::OneOfType, ctx::Context) = ctx.options.parametrize_oneofs
@@ -117,7 +120,7 @@ function _get_type_bound(f::OneOfType, ctx::Context)
     for o in f.fields
         name = jl_typename(o.type, ctx)
         get!(seen, name) do
-            push!(union_types, name in ctx._curr_cyclic_defs || name == ctx._toplevel_name[] ? abstract_type_name(name) : name)
+            push!(union_types, _is_cyclic_reference(o.type, ctx) ? abstract_type_name(_get_name(o.type)) : name)
             nothing
         end
     end
