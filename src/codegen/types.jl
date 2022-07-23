@@ -144,9 +144,12 @@ end
 
 function get_type_params(t::MessageType, ctx::Context)
     out = (field.name => _get_type_bound(field, ctx) for field in t.fields if _needs_type_params(field, ctx))
+    i = 0
     type_params = Dict{String,ParamMetadata}()
-    for (i, (k, v)) in enumerate(out)
-        type_params[k] = ParamMetadata(string("T", i), v)
+    for field in t.fields
+        !_needs_type_params(field, ctx) && continue
+        i += 1
+        type_params[field.name] = ParamMetadata(string("T", i), _get_type_bound(field, ctx))
     end
     return type_params
 end
