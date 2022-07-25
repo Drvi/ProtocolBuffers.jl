@@ -78,7 +78,7 @@ All imported `.proto` files are compiled as well; an error is thrown if they can
 # Arguments
 - `relative_paths::Union{String,Vector{String}}`: A path or paths to `.proto` files to be compiled.
 - `search_directories::Union{String,Vector{String},Nothing}=nothing`: A directory or directories to search for `relative_paths` in. By default, the current directory is used.
-- `output_directory::Union{String,Nothing}=nothing`: Path to store the generated Julia source code. When omitted, the translated code is saved to temp directory, the path being shown as a @info log.
+- `output_directory::Union{String,Nothing}=nothing`: Path to store the generated Julia source code. When omitted, the translated code is saved to temp directory, the path is shown as a @info log.
 
 # Keywords
 - `include_vendored_wellknown_types::Bool=true`: Append `ProtocolBuffers.VENDORED_WELLKNOWN_TYPES_PARENT_PATH` to `search_directories`, making the "well-known" message definitions available.
@@ -96,7 +96,7 @@ struct MyMessage
     message_field::MyOtherMessage}
 end
 ```
-- `add_kwarg_constructors::Bool=false`: For each message, generate outer constructor with optional keyword arguments (if a field is a required message, there is no default values and the keyword argument is not optional).
+- `add_kwarg_constructors::Bool=false`: For each message, generate an outer constructor with optional keyword arguments (if a field is a required message, there are no default values and the keyword argument is not optional).
 - `parametrize_oneofs::Bool=false`: Add the `OneOf` type as a type parameter to the generated parent struct. I.e. this changes:
 ```julia
 # parametrize_oneofs == false
