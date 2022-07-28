@@ -10,7 +10,6 @@ function namespaced_top_import(p::AbstractString)
     return string('.', proto_module_name(top))
 end
 
-
 has_dependencies(p::ProtoFile) = !isempty(p.preamble.imports)
 is_namespaced(p::ProtoFile) = !isempty(p.preamble.namespace)
 namespace(p::ProtoFile) = p.preamble.namespace
@@ -44,36 +43,88 @@ import_paths(p::ResolvedProtoFile) = import_paths(p.proto_file)
 namespaced_top_include(p::ResolvedProtoFile) = namespaced_top_include(p.proto_file)
 namespaced_top_import(p::ResolvedProtoFile) = namespaced_top_import(p.proto_file)
 
-struct NamespaceTrie
-    scope::String
-    proto_files::Vector{ResolvedProtoFile}
-    children::Dict{String,NamespaceTrie}
+struct Submodule
+    name::String
+    proto_files::Vector{ResolvedProtoFile} # Files defined at this package level
+    submodules::Vector{Submodule}          # Inserted in topologically sorted order
+    submodule_names::Vector{String}        # At every level, these have to be included so that there are no secluded parts of the package
+    imports::Set{String}                   # Non-internal imports -- only populated on the top level
 end
-NamespaceTrie(s::AbstractString) = NamespaceTrie(s, [], Dict())
-NamespaceTrie() = NamespaceTrie("", [], Dict())
+Submodule(s::AbstractString) = Submodule(s, [], [], [], Set())
+Submodule() = Submodule("", [], [], [], Set())
 
-function insert!(node::NamespaceTrie, file::ResolvedProtoFile)
+struct ProtoPackage
+    ns::Submodule
+    root_path::String
+end
+ProtoPackage(name::AbstractString, root_path::AbstractString) = ProtoPackage(Submodule(name), root_path)
+
+struct Namespaces
+    non_package_protos::Vector{ResolvedProtoFile}
+    packages::Dict{String,ProtoPackage}
+end
+
+function Namespaces(files_in_order::Vector{ResolvedProtoFile}, root_path::String)
+    t = Namespaces([], Dict())
+    internal_import_sets = Dict{String,Set{String}}()
+    for file in files_in_order
+        if !is_namespaced(file)
+            push!(t.non_package_protos, file)
+        else
+            top_namespace = first(split(namespace(file), '.'))
+            p = get!(t.packages, top_namespace, ProtoPackage(top_namespace, root_path))
+            insert!(p.ns, file)
+            push!(get!(internal_import_sets, top_namespace, Set{String}()), file.import_path)
+        end
+    end
+    for (k, p) in t.packages
+        internal_import_set = internal_import_sets[k]
+        populate_imports!(p.ns, Set(file.import_path for file in files_in_order if !(file.import_path in internal_import_set)))
+    end
+    return t
+end
+
+function insert!(node::Submodule, file::ResolvedProtoFile)
     if !is_namespaced(file)
         push!(node.proto_files, file)
         return nothing
     end
-    for scope in split(namespace(file), '.')
-        node = get!(node.children, scope, NamespaceTrie(scope))
+    for name in split(namespace(file), '.')
+        name == node.name && continue
+        i = findfirst(==(name), node.submodule_names)
+        if isnothing(i)
+            push!(node.submodule_names, name)
+            node = push!(node.submodules, Submodule(name))[end]
+        else
+            node = node.submodules[i]
+        end
     end
     push!(node.proto_files, file)
     return nothing
 end
 
-function NamespaceTrie(files::Union{AbstractVector,Base.ValueIterator})
-    namespace = NamespaceTrie()
-    for file in files
-        insert!(namespace, file)
+function populate_imports!(node::Submodule, remaining::Set{String}, depth::Int=1)
+    submodules = depth == 1 ? vcat(node, node.submodules) : node.submodules
+    immediate_downstream_imports = (
+        path
+        for submodule in submodules
+        for file in submodule.proto_files
+        for path in import_paths(file)
+    )
+    for i in immediate_downstream_imports
+        p = pop!(remaining, i, nothing)
+        if !isnothing(p)
+            push!(node.imports, i)
+        end
     end
-    namespace
+    for n in node.submodules
+        populate_imports!(n, remaining, depth+1)
+        # populate_imports!(n, copy(remaining))
+    end
 end
 
-function NamespaceTrie(files::Union{AbstractVector,Base.ValueIterator}, s::AbstractString)
-    namespace = NamespaceTrie(s)
+function Submodule(files::Vector{ResolvedProtoFile})
+    namespace = Submodule()
     for file in files
         insert!(namespace, file)
     end
@@ -86,61 +137,94 @@ function get_upstream_dependencies!(file::ResolvedProtoFile, upstreams)
     end
 end
 
-function create_namespaced_packages(ns::NamespaceTrie, output_directory::AbstractString, root::AbstractString, parsed_files, options)
-    path = joinpath(output_directory, ns.scope, "")
-    if !isempty(ns.scope) # top level, not in a module
-        current_module_path = proto_module_file_name(ns.scope)
-        open(joinpath(path, current_module_path), "w") do io
-            println(io, "module $(proto_module_name(ns.scope))")
-            println(io)
-
-            # load in imported proto files that live outside of this package
-            external_dependencies = Set{String}(Iterators.flatten(Iterators.map(import_paths, ns.proto_files)))
-            setdiff!(external_dependencies, map(x->x.import_path, ns.proto_files))
-            seen_imports = Dict{String,Nothing}()
-            for external_dependency in external_dependencies
-                file = parsed_files[external_dependency]
-                if is_namespaced(file)
-                    import_pkg_name = namespaced_top_import(file)
-                    get!(seen_imports, import_pkg_name) do
-                        println(io, "include(", repr(relpath(joinpath(root, namespaced_top_include(file)), path)), ")")
-                        println(io, "import $(import_pkg_name)")
-                    end
-                else
-                    println(io, "include(", repr(namespaced_top_include(file)), ")")
-                    options.always_use_modules && println(io, "import .$(replace(proto_script_name(file), ".jl" => ""))")
-                end
+function get_dependencies(ns::Submodule, parsed_files::Dict)
+    external_dependencies = Set{String}()
+    internal_dependencies = Set{String}()
+    isempty(ns.proto_files) && return external_dependencies, internal_dependencies
+    top_namespace = namespaced_top_import(first(ns.proto_files))
+    for p in ns.proto_files
+        bot_namespace = split(namespace(p), '.')[end]
+        for i in p.proto_file.preamble.imports
+            imported_file = parsed_files[i.path]
+            if top_namespace != namespaced_top_import(parsed_files[i.path])
+                 # files don't share package root
+                push!(external_dependencies, i.path)
+            elseif bot_namespace != split(namespace(imported_file), '.')[end]
+                # live in the same package, but in different leaf module
+                push!(internal_dependencies, i.path)
             end
-            !isempty(external_dependencies) && println(io)
-
-            # load in scopes nested in this namespace (the modules ending with `_PB`)
-            for (child_file) in keys(ns.children)
-                include_path = joinpath(child_file, proto_module_file_name(child_file))
-                println(io, "include(", repr(include_path), ")")
-                println(io, "import .$(proto_module_name(child_file))")
-            end
-
-            # load in imported proto files that are defined in this package (the files ending with `_pb.jl`)
-            sorted_files, _ = _topological_sort(
-                (file.import_path => file for file in ns.proto_files),
-                setdiff(keys(parsed_files), map(x->x.import_path, ns.proto_files))
-            )
-            for file in sorted_files
-                module_name = proto_script_name(file)
-                println(io, "include(", repr(module_name), ")")
-            end
-
-            println(io)
-            println(io, "end # module $(proto_module_name(ns.scope))")
+            # files live in the same module, no need to import
         end
     end
-    for p in ns.proto_files
-        dst_path = joinpath(path, proto_script_name(p))
-        CodeGenerators.translate(dst_path, p, parsed_files, options)
+    return external_dependencies, internal_dependencies
+end
+
+
+function generate_submodule_file(io::IO, ns::Submodule, p::ProtoPackage, output_directory::AbstractString, parsed_files::Dict, options::Options, depth::Int)
+    path = joinpath(output_directory, ns.name, "")
+    println(io, "module $(proto_module_name(ns.name))")
+    println(io)
+    external_dependencies, internal_dependencies = get_dependencies(ns, parsed_files)
+    has_deps = !isempty(external_dependencies) || !isempty(internal_dependencies) || !isempty(ns.imports)
+    seen_imports = Dict{String,Nothing}()
+    # This is where we **include** and import external dependencies so they are available downstream
+    for external_import in ns.imports
+        imported_file = parsed_files[external_import]
+        import_pkg_name = namespaced_top_import(imported_file)
+        get!(seen_imports, import_pkg_name) do
+            println(io, "include(", repr(relpath(joinpath(p.root_path, namespaced_top_include(imported_file)), path)), ")")
+            println(io, "import $(import_pkg_name)")
+        end
     end
-    for (child_dir, child) in ns.children
-        !isdir(joinpath(path, child_dir)) && mkdir(joinpath(path, child_dir))
-        create_namespaced_packages(child, path, root, parsed_files, options)
+    # This is where we **import** external dependencies which were included somewhere in parent scope
+    for external_dependency in external_dependencies
+        file = parsed_files[external_dependency]
+        if is_namespaced(file)
+            import_pkg_name = namespaced_top_import(file)
+            get!(seen_imports, import_pkg_name) do
+                println(io, "import .$(import_pkg_name)")
+            end
+        else
+            println(io, "include(", repr(namespaced_top_include(file)), ")")
+            options.always_use_modules && println(io, "import .$(replace(proto_script_name(file), ".jl" => ""))")
+        end
+    end
+    # This is where we import internal dependencies
+    for internal_dependency in internal_dependencies
+        file = parsed_files[internal_dependency]
+        println(io, "import ..", proto_module_name(file))
+    end
+    has_deps && println(io)
+
+    # load in names nested in this namespace (the modules ending with `PB`)
+    for submodule_name in ns.submodule_names
+        include_path = joinpath(submodule_name, proto_module_file_name(submodule_name))
+        println(io, "include(", repr(include_path), ")")
+        println(io, "import .$(proto_module_name(submodule_name))")
+    end
+    # load in imported proto files that are defined in this package (the files ending with `_pb.jl`)
+    for file in ns.proto_files
+        module_name = proto_script_name(file)
+        println(io, "include(", repr(module_name), ")")
+    end
+
+    println(io)
+    println(io, "end # module $(proto_module_name(ns.name))")
+end
+
+function create_namespaced_package(ns::Submodule, p::ProtoPackage, output_directory::AbstractString, parsed_files::Dict, options::Options, depth=1)
+    path = joinpath(output_directory, ns.name, "")
+    !isdir(path) && mkdir(path)
+    current_module_path = proto_module_file_name(ns.name)
+    open(joinpath(path, current_module_path), "w", lock=false) do io
+        generate_submodule_file(io, ns, p, output_directory, parsed_files, options, depth)
+    end
+    for file in ns.proto_files
+        dst_path = joinpath(path, proto_script_name(file))
+        CodeGenerators.translate(dst_path, file, parsed_files, options)
+    end
+    for submodule in ns.submodules
+        create_namespaced_package(submodule, p, path, parsed_files, options, depth+1)
     end
     return nothing
 end

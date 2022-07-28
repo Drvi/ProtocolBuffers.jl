@@ -164,8 +164,18 @@ function _protojl(
         isdir(output_directory) || error("`output_directory` \"$output_directory\" doesn't exist")
         output_directory = abspath(output_directory)
     end
-    ns = NamespaceTrie(values(parsed_files))
-    create_namespaced_packages(ns, output_directory, output_directory, parsed_files, options)
+
+    # TODO: Throw an error on cyclic imports?
+    sorted_files = _topological_sort(parsed_files, Set{String}())[1]
+    sorted_files = [parsed_files[sorted_file] for sorted_file in sorted_files]
+    n = Namespaces(sorted_files, output_directory)
+    for p in n.non_package_protos
+        dst_path = joinpath(output_directory, proto_script_name(p))
+        CodeGenerators.translate(dst_path, p, parsed_files, options)
+    end
+    for p in values(n.packages)
+        create_namespaced_package(p.ns, p, output_directory, parsed_files, options)
+    end
     return nothing
 end
 
