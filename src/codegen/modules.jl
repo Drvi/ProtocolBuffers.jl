@@ -1,7 +1,7 @@
 # https://github.com/golang/protobuf/issues/992#issuecomment-558718772
 proto_module_file_name(path::AbstractString) = string(proto_module_name(path), ".jl")
 proto_module_file_path(path::AbstractString) = joinpath(dirname(path), proto_module_file_name(path))
-proto_module_name(path::AbstractString) = string(replace(titlecase(basename(path)), r"[-_]" => "", ".Proto" => ""), "_PB")
+proto_module_name(path::AbstractString) = string(replace(titlecase(basename(path)), r"[-_]" => "", ".Proto" => ""), "PB")
 proto_module_path(path::AbstractString) = joinpath(dirname(path), proto_module_name(path))
 proto_script_name(path::AbstractString) = string(replace(basename(path), ".proto" => ""), "_pb.jl")
 proto_script_path(path::AbstractString) = joinpath(dirname(path), proto_script_name(path))

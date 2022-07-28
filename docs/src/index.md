@@ -158,10 +158,10 @@ For `.proto` files that are packages, a nested directory structure will be gener
 ```bash
 root  # `output_directory` arg from from `protojl`
 └── foo_bar
-    ├── FooBar_PB.jl  # defines module `FooBar_PB`, imports `BazGrok_PB`
+    ├── FooBarPB.jl  # defines module `FooBarPB`, imports `BazGrokPB`
     └── baz_grok
         ├── {file_name}_pb.jl
-        └── BazGrok_PB.jl  # defines module `BazGrok_PB`, includes `{file_name}_pb.jl`
+        └── BazGrokPB.jl  # defines module `BazGrokPB`, includes `{file_name}_pb.jl`
 ```
 When reading `.proto` files that use `import` statements, the imported files have to be located at the respective import paths relative to `search_directories`.
 

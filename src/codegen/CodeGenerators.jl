@@ -68,11 +68,12 @@ When a `{file_name}.proto` contains e.g. `package foo_bar.baz_grok`, the followi
 ```bash
 root  # `output_directory` arg from from `protojl`
 └── foo_bar
-    ├── FooBar_PB.jl  # defines module `FooBar_PB`, imports `BazGrok_PB`
+    ├── FooBarPB.jl  # defines module `FooBarPB`, imports `BazGrokPB`
     └── baz_grok
         ├── {file_name}_pb.jl
-        └── BazGrok_PB.jl  # defines module `BazGrok_PB`, includes `{file_name}_pb.jl`
+        └── BazGrokPB.jl  # defines module `BazGrokPB`, includes `{file_name}_pb.jl`
 ```
+You should include the top-level module of a generated package, i.e. `FooBarPB.jl` in this example.
 All imported `.proto` files are compiled as well; an error is thrown if they cannot be resolved or found within `search_directories`.
 
 # Arguments
