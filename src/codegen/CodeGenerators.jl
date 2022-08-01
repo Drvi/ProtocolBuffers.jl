@@ -127,7 +127,13 @@ function protojl(
     parametrize_oneofs::Bool=false,
 )
     options = Options(include_vendored_wellknown_types, always_use_modules, force_required, add_kwarg_constructors, parametrize_oneofs)
-    _protojl(relative_paths, search_directories, output_directory, options)
+    return _protojl(relative_paths, search_directories, output_directory, options)
+end
+
+function get_upstream_dependencies!(file::ResolvedProtoFile, upstreams)
+    for path in import_paths(file)
+        push!(upstreams, path)
+    end
 end
 
 function _protojl(
@@ -166,15 +172,15 @@ function _protojl(
     end
 
     # TODO: Throw an error on cyclic imports?
-    sorted_files = _topological_sort(parsed_files, Set{String}())[1]
+    sorted_files = first(_topological_sort(parsed_files, Set{String}()))
     sorted_files = [parsed_files[sorted_file] for sorted_file in sorted_files]
-    n = Namespaces(sorted_files, output_directory)
-    for p in n.non_package_protos
-        dst_path = joinpath(output_directory, proto_script_name(p))
-        CodeGenerators.translate(dst_path, p, parsed_files, options)
+    n = Namespaces(sorted_files, output_directory, parsed_files)
+    for m in n.non_namespaced_protos
+        dst_path = joinpath(output_directory, proto_script_name(m))
+        CodeGenerators.translate(dst_path, m, parsed_files, options)
     end
-    for p in values(n.packages)
-        create_namespaced_package(p.ns, p, output_directory, parsed_files, options)
+    for m in values(n.packages)
+        generate_package(m, output_directory, parsed_files, options)
     end
     return nothing
 end
