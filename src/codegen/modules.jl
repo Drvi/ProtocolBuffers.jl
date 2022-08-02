@@ -142,7 +142,7 @@ function generate_module_file(io::IO, m::ProtoModule, output_directory::Abstract
         # can import them safely.
         for nonpkg_import in m.nonpkg_imports
             !options.always_use_modules && print(io, "module $(nonpkg_import)\n    ")
-            println(io, "include(\"../", nonpkg_import, ".jl\")")
+            println(io, "include(", repr(joinpath("..", string(nonpkg_import, ".jl"))), ')')
             !options.always_use_modules && println(io, "end")
         end
     else # depth > 1
