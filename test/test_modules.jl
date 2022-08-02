@@ -78,7 +78,7 @@ end
     @test n.packages["A"].dirname == "A"
     @test n.packages["A"].name == "APB"
     @test isempty(n.packages["A"].nonpkg_imports)
-    @test n.packages["A"].external_imports == Set(["../B/BPB.jl"])
+    @test n.packages["A"].external_imports == Set([joinpath("..", "B", "BPB.jl")])
     @test n.packages["A"].submodules[1].dirname == "B"
     @test n.packages["A"].submodules[1].name == "BPB"
     @test n.packages["A"].submodules[1].proto_files[1].import_path == "main"
@@ -89,7 +89,7 @@ end
     @test n.packages["B"].submodules[1].proto_files[1].import_path == "path/to/a"
 end
 
-@testset "External dependencies are are imported in in the topmost module where all downstreams can reach it" begin
+@testset "External dependencies are imported in in the topmost module where all downstreams can reach it" begin
     s, d, n = simple_namespace_from_protos(
         "package A.B.C.D.E; import \"path/to/a\"; import \"path/to/b\";",
         Dict(
@@ -99,16 +99,16 @@ end
         ),
         "A"
     );
-    @test n.packages["A"].external_imports == Set(["../B/BPB.jl"])
+    @test n.packages["A"].external_imports == Set([joinpath("..", "B", "BPB.jl")])
     @test n.packages["A"].submodules[1].external_imports == Set{String}()
     @test n.packages["A"].submodules[1].submodules[1].external_imports == Set(["...BPB"])
     @test n.packages["A"].submodules[1].submodules[1].submodules[1].external_imports == Set{String}()
     @test s == """
     module APB
 
-    include("../B/BPB.jl")
+    include($(repr(joinpath("..", "B", "BPB.jl"))))
 
-    include("B/BPB.jl")
+    include($(repr(joinpath("B", "BPB.jl"))))
 
     end # module APB
     """
@@ -127,10 +127,10 @@ end
     @test s == """
     module APB
 
-    include("../a_pb.jl")
-    include("../b_pb.jl")
+    include($(repr(joinpath("..", "a_pb.jl"))))
+    include($(repr(joinpath("..", "b_pb.jl"))))
 
-    include("B/BPB.jl")
+    include($(repr(joinpath("B", "BPB.jl"))))
 
     end # module APB
     """
@@ -153,13 +153,13 @@ end
     module APB
 
     module a_pb
-        include("../a_pb.jl")
+        include($(repr(joinpath("..", "a_pb.jl"))))
     end
     module b_pb
-        include("../b_pb.jl")
+        include($(repr(joinpath("..", "b_pb.jl"))))
     end
 
-    include("B/BPB.jl")
+    include($(repr(joinpath("B", "BPB.jl"))))
 
     end # module APB
     """

@@ -18,7 +18,7 @@ Base.position(x::BufferedStreams.BufferedOutputStream) = max(0, position(x.sink)
 # - Services & RPC
 # - Preserve docstrings
 # - Add a metadata method to query integer encodings (varint / zigzag / fixed)
-# - Extensions
+# - Extensions / well-known Any type support
 # - Text Format
 
 

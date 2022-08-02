@@ -160,7 +160,7 @@ function generate_module_file(io::IO, m::ProtoModule, output_directory::Abstract
 
     # load in names nested in this namespace (the modules ending with `PB`)
     for submodule in m.submodules
-        println(io, "include(", repr(string(submodule.dirname, '/', submodule.name, ".jl")), ")")
+        println(io, "include(", repr(joinpath(submodule.dirname, string(submodule.name, ".jl"))), ")")
     end
     # load in imported proto files that are defined in this package (the files ending with `_pb.jl`)
     for file in m.proto_files
