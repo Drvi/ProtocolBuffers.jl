@@ -33,7 +33,6 @@ end
 struct Context
     proto_file::ProtoFile
     proto_file_path::String
-    imports::Set{String}
     file_map::Dict{String,ResolvedProtoFile}
     _curr_cyclic_defs::Set{String}
     _toplevel_name::Ref{String}

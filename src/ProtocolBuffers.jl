@@ -21,7 +21,6 @@ Base.position(x::BufferedStreams.BufferedOutputStream) = max(0, position(x.sink)
 # - Extensions / well-known Any type support
 # - Text Format
 
-
 const PACKAGE_VERSION = let
     project = TOML.parsefile(joinpath(@__DIR__, "..", "Project.toml"))
     VersionNumber(project["version"])

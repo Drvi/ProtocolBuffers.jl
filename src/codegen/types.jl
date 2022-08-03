@@ -34,21 +34,24 @@ function jl_typename(t::MapType, ctx::Context)
     return string("Dict{", key_type, ',', val_type,"}")
 end
 function jl_typename(t::ReferencedType, ctx::Context)
+    !isempty(t.final_typename) && return t.final_typename
+    # assessing the type makes sure we search for the reference in imports
+    # and populate the resolved_package field.
+    is_enum = _is_enum(t, ctx)
     name = safename(t)
     # The identifier might have been prefixed with either the name of the enclosing type
     # or with the module it was defined in. Here we determine whether the namespace is
     # actually a package and if it is, we prefix the safename of the type with it.
-    if !(isempty(t.namespace) || !isnothing(t.enclosing_type) || t.namespace_is_type || t.namespace == namespace(ctx.proto_file))
-        import_chain = mapreduce(proto_module_name, (x, y)->join((x, y), '.'), split(t.namespace, '.'))
-        name = string(import_chain, '.', name)
+    if !(isempty(t.namespace) || !isnothing(t.enclosing_type) || t.namespace_is_type || t.resolved_package == join(ctx.proto_file.preamble.julia_namespace, '.')) # TODO: namespace
+        name = string(t.resolved_package, '.', name)
     end
     # This is where EnumX.jl bites us -- we need to search through all defitnition (including imported)
     # to make sure a ReferencedType is an Enum, in which case we need to add a `.T` suffix.
-    _get_referenced_type_type!(t, ctx) == "enum" && return string(name, ".T")
+    is_enum && (name = string(name, ".T"))
+    t.final_typename = name # cache
     return name
 end
-# NOTE: If there is a self-reference to the parent type, we might get
-#       a Union{..., Union{Nothing,parentType}, ...}. This is probably ok?
+
 function jl_typename(t::OneOfType, ctx::Context)
     return string("OneOf{", _jl_oneof_inner_typename(t, ctx), "}")
 end
@@ -60,7 +63,10 @@ end
 
 function _search_imports(proto_file::ProtoFile, file_map, t::ReferencedType, depth=0)
     def = get(proto_file.definitions, t.name, nothing)
-    !isnothing(def) && return def
+    if !isnothing(def)
+        isnothing(t.package_namespace) && (t.package_namespace = join(proto_file.preamble.julia_namespace, '.'))
+        return def
+    end
     for _import in proto_file.preamble.imports
         ((depth > 1) && _import.import_option != Parsers.PUBLIC) && continue
         def = _search_imports(file_map[_import.path].proto_file, file_map, t, depth+1)
@@ -72,30 +78,22 @@ end
 # we need this to find the first value of enums...
 function _get_referenced_type(t::ReferencedType, ctx::Context)
     def = _search_imports(ctx.proto_file, ctx.file_map, t)
-    isnothing(def) && error("Referenced type `$(t)` not found in any imported package ('$(join(union(ctx.imports, [namespace(ctx.proto_file)]), "', '"))').")
+    if isnothing(def)
+        error("Referenced type `$(t)` not found in any imported package.').")
+    end
     return def
 end
 
-function _get_referenced_type_type!(t::ReferencedType, ctx::Context)
-    if isempty(t.type_name)
+function _get_type_of_referenced_type!(t::ReferencedType, ctx::Context)
+    if !t.resolved
         def = _get_referenced_type(t, ctx)
-        if isa(def, MessageType)
-            t.type_name = "message"
-        elseif isa(def, EnumType)
-            t.type_name = "enum"
-        elseif isa(def, ServiceType)
-            t.type_name = "service"
-        elseif isa(def, RPCType)
-            t.type_name = "rpc"
-        else
-            error("Referenced type `$(t.name)` has unsupported type $(typeof(def))")
-        end
+        t.reference_type = Parsers.reference_type(def, t)
     end
-    return t.type_name
+    return t.reference_type
 end
 
-_is_message(t::ReferencedType, ctx::Context) = _get_referenced_type_type!(t, ctx) == "message"
-_is_enum(t::ReferencedType, ctx::Context)    = _get_referenced_type_type!(t, ctx) == "enum"
+_is_message(t::ReferencedType, ctx::Context) = _get_type_of_referenced_type!(t, ctx) == Parsers.MESSAGE
+_is_enum(t::ReferencedType, ctx::Context)    = _get_type_of_referenced_type!(t, ctx) == Parsers.ENUM
 
 _is_cyclic_reference(t, ::Context) = false
 _is_cyclic_reference(t::ReferencedType, ctx::Context) = t.name in ctx.proto_file.cyclic_definitions || t.name == ctx._toplevel_name[]

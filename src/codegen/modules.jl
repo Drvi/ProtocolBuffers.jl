@@ -3,13 +3,10 @@ proto_module_file_name(path::AbstractString) = string(proto_module_name(path), "
 proto_module_name(path::AbstractString) = string(replace(titlecase(basename(path)), r"[-_]" => "", ".Proto" => ""), "PB")
 proto_script_name(path::AbstractString) = string(replace(basename(path), ".proto" => ""), "_pb.jl")
 proto_script_path(path::AbstractString) = joinpath(dirname(path), proto_script_name(path))
-function namespaced_top_import(p::AbstractString)
-    top = first(split(p, "."))
-    return string('.', proto_module_name(top))
-end
 
 is_namespaced(p::ProtoFile) = !isempty(p.preamble.namespace)
 namespace(p::ProtoFile) = p.preamble.namespace
+julia_namespace(p::ProtoFile) = p.preamble.julia_namespace
 proto_module_file_name(p::ProtoFile) = proto_module_file_name(p.filepath)
 proto_module_name(p::ProtoFile) = proto_module_name(p.filepath)
 proto_script_name(p::ProtoFile) = proto_script_name(p.filepath)
@@ -17,16 +14,17 @@ proto_script_path(p::ProtoFile) = proto_script_path(p.filepath)
 import_paths(p::ProtoFile) = (i.path for i in p.preamble.imports)
 function namespaced_top_include(p::ProtoFile)
     if is_namespaced(p)
-        top = first(split(namespace(p), "."))
+        top = first(namespace(p))
         return joinpath(top, proto_module_file_name(top))
     else
         return proto_script_name(p)
     end
 end
-namespaced_top_import(p::ProtoFile) = namespaced_top_import(namespace(p))
+namespaced_top_import(p::ProtoFile) = string('.', proto_package_name(p))
 
 is_namespaced(p::ResolvedProtoFile) = is_namespaced(p.proto_file)
 namespace(p::ResolvedProtoFile) = namespace(p.proto_file)
+julia_namespace(p::ResolvedProtoFile) = julia_namespace(p.proto_file)
 proto_module_file_name(p::ResolvedProtoFile) = proto_module_file_name(p.proto_file)
 proto_module_name(p::ResolvedProtoFile) = proto_module_name(p.proto_file)
 proto_script_name(p::ResolvedProtoFile) = proto_script_name(p.proto_file)
@@ -35,26 +33,25 @@ namespaced_top_include(p::ResolvedProtoFile) = namespaced_top_include(p.proto_fi
 namespaced_top_import(p::ResolvedProtoFile) = namespaced_top_import(p.proto_file)
 proto_script_path(p::ResolvedProtoFile) = proto_script_path(p.proto_file)
 
-proto_package_name(p) = proto_module_name(first(split(namespace(p), '.')))
+proto_package_name(p) = first(julia_namespace(p))
 rel_import_path(file, root_path) = relpath(joinpath(root_path, "..", namespaced_top_include(file)), joinpath(root_path))
 
-
-function internal_module_relative_import_path(importer, importee)
-    importer_modules = split(importer, '.')
-    importee_modules = split(importee, '.')
-    n = length(importer_modules)
-    m = length(importee_modules)
-    # Must have common root and not importing itself
-    @assert importer_modules[1] == importee_modules[1] && importer !== importee
-    io = IOBuffer()
-    # Eat the common part of the path
-    i = 1 + count(p->p[1]==p[2], zip(importer_modules, importee_modules))
-    # Ascend from the importer to the closest common ancestor
-    foreach(_->print(io, '.'), i:n)
-    # Descend from the common anscestor to the importee
-    foreach(j->print(io, '.', proto_module_name(importee_modules[j])), i-(n>m):m)
-    return String(take!(io))
-end
+# function internal_module_relative_import_path(importer, importee)
+#     importer_modules = split(importer, '.')
+#     importee_modules = split(importee, '.')
+#     n = length(importer_modules)
+#     m = length(importee_modules)
+#     # Must have common root and not importing itself
+#     @assert importer_modules[1] == importee_modules[1] && importer !== importee
+#     io = IOBuffer()
+#     # Eat the common part of the path
+#     i = 1 + count(p->p[1]==p[2], zip(importer_modules, importee_modules))
+#     # Ascend from the importer to the closest common ancestor
+#     foreach(_->print(io, '.'), i:n)
+#     # Descend from the common anscestor to the importee
+#     foreach(j->print(io, '.', proto_module_name(importee_modules[j])), i-(n>m):m)
+#     return String(take!(io))
+# end
 
 struct ProtoModule
     name::String
@@ -79,8 +76,8 @@ function Namespaces(files_in_order::Vector{ResolvedProtoFile}, root_path::String
         if !is_namespaced(file)
             push!(t.non_namespaced_protos, file)
         else
-            top_namespace = first(split(namespace(file), '.'))
-            module_name = proto_module_name(top_namespace)
+            top_namespace = first(namespace(file))
+            module_name = first(julia_namespace(file))
             p = get!(t.packages, top_namespace, empty_module(module_name, top_namespace))
             add_file_to_package!(p, file, proto_files, root_path)
         end
@@ -91,8 +88,7 @@ end
 function add_file_to_package!(root::ProtoModule, file::ResolvedProtoFile, proto_files::Dict, root_path::String)
     node = root
     depth = 0
-    for name in split(namespace(file), '.')
-        module_name = proto_module_name(name)
+    for (name, module_name) in zip(namespace(file), julia_namespace(file))
         depth += 1
         module_name == node.name && continue
         i = findfirst(==(name), node.submodule_names)
@@ -117,7 +113,7 @@ function add_file_to_package!(root::ProtoModule, file::ResolvedProtoFile, proto_
             if namespace(file) == namespace(imported_file)
                 continue # no need to import from the same package
             elseif file_pkg == root.name
-                push!(node.internal_imports, internal_module_relative_import_path(namespace(file), namespace(imported_file)))
+                push!(node.internal_imports, string("." ^ length(namespace(file)), proto_package_name(file)))
             else
                 depth != 1 && push!(node.external_imports, string("." ^ depth, proto_package_name(imported_file)))
                 push!(root.external_imports, rel_import_path(imported_file, root_path))

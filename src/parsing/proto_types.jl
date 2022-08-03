@@ -23,25 +23,26 @@ struct MapType <: AbstractProtoType
     keytype::AbstractProtoType
     valuetype::AbstractProtoType
 end
-# NOTE: mutable so we can change the name to reflect namespacing
-# within message / group
+
+@enum(TypeOfReference, UNKNOWN, MESSAGE, ENUM, SERVICE, RPC)
+# NOTE: mutable so we can figure out the actual type being referenced later
+#       when the rest of the file (and other, imported files) are parsed.
 mutable struct ReferencedType <: AbstractProtoType
     name::String
-    # Either [.]?(namespace).name, (type).name
-    # In the beginning, we cannot distinguish between packages vs types
-    # so we update the type later in the pipeline
-    namespace::String
-    # Whether we're pointing to something defined within a type
-    # set in `_try_namespace_referenced_types!`
-    enclosing_type::Union{Nothing,String}
-    type_name::String # message | enum | service | rpc
-    leading_dot::Bool
-    namespace_is_type::Bool # true if (Type).name; we set this in `find_external_references`
+    final_typename::String
+    type_namespace::Union{Nothing,String}
+    package_namespace::Union{Nothing,String}
+    reference_type::TypeOfReference
+    resolve_from_innermost::Bool
+    resolved::Bool
 end
+
 function ReferencedType(name::String)
-    leading_dot = startswith(name, '.')
-    package_path = split(name, '.'; keepempty=false)
-    ReferencedType(package_path[end], join(package_path[1:end-1], '.'), nothing, "", leading_dot, false)
+    if startswith(name, '.')
+        return ReferencedType(name[2:end], "", nothing, nothing, UNKNOWN, false, false)
+    else
+        return ReferencedType(name, "", nothing, nothing, UNKNOWN, true, false)
+    end
 end
 struct RPCType <: AbstractProtoType
     name::String
@@ -278,6 +279,9 @@ function parse_enum_type(ps::ParserState, name_prefix="")
     accept(ps, Tokens.SEMICOLON)
     if !parse(Bool, get(options, "allow_alias", "false"))
         !allunique(element_values) && error("Duplicates in enumeration $name. You can allow multiple keys mapping to the same number with `option allow_alias = true;`")
+    end
+    if ps.is_proto3 && first(element_values) != 0
+        error("In proto3, enums' first element must map to zero, $name has `$(first(element_names)) = $(first(element_values))` as first element.")
     end
     # TODO: validate field_numbers
     return EnumType(_dot_join(name_prefix, name), element_names, element_values, options, field_options)

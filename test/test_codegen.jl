@@ -19,9 +19,8 @@ function translate_simple_proto(str::String, options=Options())
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
-    imports = Set{String}(Iterators.map(i->namespace(d[i]), import_paths(p)))
     ctx = Context(
-        p, r.import_path, imports, d,
+        p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
         options
@@ -45,9 +44,8 @@ function translate_simple_proto(str::String, deps::Dict{String,String}, options=
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
-    imports = Set{String}(Iterators.map(i->namespace(d[i]), import_paths(p)))
     ctx = Context(
-        p, r.import_path, imports, d,
+        p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
         options

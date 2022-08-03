@@ -1,73 +1,99 @@
-_postprocess_reference!(referenced, type, definitions, namespace) = nothing
-function _postprocess_reference!(referenced, type::ReferencedType, definitions, namespace)
-    if isempty(type.namespace)
-        namespaced_name = string(namespace, '.', type.name)
-        if namespaced_name in keys(definitions)
-            type.name = namespaced_name
-            type.enclosing_type = namespace
-        elseif endswith(namespace, string('.', type.name))
-            type.enclosing_type = namespace[1:end-length(type.name)-1]
-            type.name = namespace
+function findfunc(namespace, i, name, from_innermost)
+    n = length(namespace)
+    if from_innermost
+        i > n && return (string(namespace, '.', name), n) # first search
+        j = something(findprev('.', namespace, i-1), 1)
+        j == 1 && i == 1 && return ("", -1)               # not found
+        j == 1 && i != 1 && return (namespace[1:i-1], 1)  # last search
+        j != 1 && i != 1 && return (string(namespace[1:j], name), j)
+    else
+        i < 1 && return (name, 1)                                    # first search
+        j = something(findnext('.', namespace, i+1), n)
+        j == n && i == n && return ("", -1)                          # not found
+        j == n && i != n && return (string(namespace, '.', name), n) # last search
+        j != n && i != n && return (string(namespace[1:j], name), j)
+    end
+    throw(error("When from_innermost is `true`, i must be >= 1, when from_innermost is `false`, i must be <= length(namespace), got (from_innermost=$from_innermost, i=$i)"))
+end
+
+function reference_type(def, t::ReferencedType)
+    isa(def, MessageType) ? MESSAGE :
+    isa(def, EnumType)    ? ENUM    :
+    isa(def, ServiceType) ? SERVICE :
+    isa(def, RPCType)     ? RPC     :
+    throw(error("Referenced type `$(t.name)` has unsupported type $(typeof(def))"))
+end
+
+_postprocess_reference!(external_references, type, definitions, namespace) = nothing
+function _postprocess_reference!(external_references, type::ReferencedType, definitions, namespace)
+    if !type.resolved
+        # We're trying to resolve the reference within our current file
+        # if we don't succeed, we'll try to resolve the reference among
+        # other proto files later, duing codegen.
+        i = type.resolve_from_innermost ? length(namespace) + 1 : 0
+        while true
+            (namespaced_name, i) = findfunc(namespace, i, type.name, type.resolve_from_innermost)
+            @warn type.name (; i, namespaced_name)
+            if i == -1
+                push!(external_references, type.name)
+                break
+            end
+            def = get(definitions, namespaced_name, nothing)
+            if !isnothing(def)
+                type.name = namespaced_name
+                type.type_namespace = namespace[1:i-1]
+                type.reference_type = reference_type(def, type)
+                type.resolved = true
+                break
+            end
         end
     end
-    push!(referenced, type.name)
-    if type.namespace in keys(definitions)
-        type.namespace_is_type = true
-        # The prefix is referring to another type in which the referenced type is defined
-        # we need to change the name to reflect that to prevent name collisions.
-        type.name = string(type.namespace, '.', type.name)
-    end
 end
 
-function _postprocess_field!(referenced, invalid_enums, f::FieldType{ReferencedType}, definitions, preamble, namespace)
-    _postprocess_reference!(referenced, f.type, definitions, namespace)
+function _postprocess_field!(external_references, f::FieldType{ReferencedType}, definitions, namespace)
+    _postprocess_reference!(external_references, f.type, definitions, namespace)
 end
-function _postprocess_field!(referenced, invalid_enums, f::FieldType{MapType}, definitions, preamble, namespace)
-    _postprocess_reference!(referenced, f.type.valuetype, definitions, namespace)
+function _postprocess_field!(external_references, f::FieldType{MapType}, definitions, namespace)
+    _postprocess_reference!(external_references, f.type.valuetype, definitions, namespace)
 end
-_postprocess_field!(referenced, invalid_enums, f::FieldType, definitions, preamble, namespace) = nothing
-function _postprocess_field!(referenced, invalid_enums, f::OneOfType, definitions, preamble, namespace)
+_postprocess_field!(external_references, f::FieldType, definitions, namespace) = nothing
+function _postprocess_field!(external_references, f::OneOfType, definitions, namespace)
     for field in f.fields
-        _postprocess_field!(referenced, invalid_enums, field, definitions, preamble, namespace)
+        _postprocess_field!(external_references, field, definitions, namespace)
     end
     return nothing
 end
-function _postprocess_field!(referenced, invalid_enums, f::GroupType, definitions, preamble, namespace)
+function _postprocess_field!(external_references, f::GroupType, definitions, namespace)
     for field in f.type.fields
-        _postprocess_field!(referenced, invalid_enums, field, definitions, preamble, namespace)
+        _postprocess_field!(external_references, field, definitions, namespace)
     end
     return nothing
 end
 
-function _postprocess_type!(referenced, invalid_enums, t::EnumType, definitions, preamble)
-    preamble.isproto3 && first(t.element_values) != 0 && push!(invalid_enums, t.name)
-    return nothing
-end
-function _postprocess_type!(referenced, invalid_enums, t::ServiceType, definitions, preamble)
+_postprocess_type!(external_references, t::EnumType, definitions) = nothing
+function _postprocess_type!(external_references, t::ServiceType, definitions)
     for rpc in t.rpcs
-        _postprocess_reference!(referenced, rpc.request_type, definitions, t.name)
-        _postprocess_reference!(referenced, rpc.response_type, definitions, t.name)
+        _postprocess_reference!(external_references, rpc.request_type, definitions, t.name)
+        _postprocess_reference!(external_references, rpc.response_type, definitions, t.name)
     end
     return nothing
 end
-function _postprocess_type!(referenced, invalid_enums, t::MessageType, definitions, preamble)
+function _postprocess_type!(external_references, t::MessageType, definitions)
     for field in t.fields
-        _postprocess_field!(referenced, invalid_enums, field, definitions, preamble, t.name)
+        _postprocess_field!(external_references, field, definitions, t.name)
     end
     return nothing
 end
 
-function postprocess_types!(definitions::Dict{String, Union{MessageType, EnumType, ServiceType}}, preamble::ProtoFilePreamble)
+function postprocess_types!(definitions::Dict{String, Union{MessageType, EnumType, ServiceType}})
     # Traverse all definitions and see which of those referenced are not defined
     # in this module. Create a list of these imported definitions so that we can ignore
     # them when doing the topological sort.
-    referenced = Set{String}()
-    invalid_enums = Set{String}()
+    external_references = Set{String}()
     for definition in values(definitions)
-        _postprocess_type!(referenced, invalid_enums, definition, definitions, preamble)
+        _postprocess_type!(external_references, definition, definitions)
     end
-    !isempty(invalid_enums) && error("In proto3, enums' first element must map to zero, following enums violate that: $invalid_enums")
-    return setdiff(referenced, keys(definitions))
+    return external_references
 end
 
 get_type_name(::AbstractProtoNumericType) = nothing

@@ -8,7 +8,7 @@ using ProtocolBuffers.Parsers: parse_proto_file, ParserState
 using ProtocolBuffers.Lexers: Lexer
 using Test
 
-function simple_namespace_from_protos(str::String, deps::Dict{String,String}, pkg::String="", options::Options=Options())
+function simple_namespace_from_protos(str::String, deps::Dict{String,String}=Dict{String, String}(), pkg::String="", options::Options=Options())
     l = Lexer(IOBuffer(str), "main")
     p = parse_proto_file(ParserState(l))
     r = ResolvedProtoFile("main", p)
@@ -165,6 +165,25 @@ end
     """
 end
 
+@testset "Repeated julia module names are made unique" begin
+    s, d, n = simple_namespace_from_protos(
+        "package A.B.A.D.B.A;",
+    );
+    @test haskey(n.packages, "A")
+    @test n.packages["A"].name == "APB"
+    @test n.packages["A"].dirname == "A"
+    @test n.packages["A"].submodules[1].name == "BPB"
+    @test n.packages["A"].submodules[1].dirname == "B"
+    @test n.packages["A"].submodules[1].submodules[1].name == "APB1"
+    @test n.packages["A"].submodules[1].submodules[1].dirname == "A"
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].name == "DPB"
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].dirname == "D"
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].name == "BPB1"
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].dirname == "B"
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].submodules[1].name == "APB2"
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].submodules[1].dirname == "A"
+end
+
 @testset "Relative internal imports" begin
     s, d, n = simple_namespace_from_protos(
         "package A.B.C.D.E; import \"main2\";",
@@ -173,7 +192,7 @@ end
         ),
         "A",
     );
-    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].internal_imports == Set(["..DPB"])
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].internal_imports == Set([".....APB"])
 
     s, d, n = simple_namespace_from_protos(
         "package A.B.C.D.E.F; import \"main2\";",
@@ -182,7 +201,7 @@ end
         ),
         "A",
     );
-    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].submodules[1].internal_imports == Set(["...DPB"])
+    @test n.packages["A"].submodules[1].submodules[1].submodules[1].submodules[1].submodules[1].internal_imports == Set(["......APB"])
 
     s, d, n = simple_namespace_from_protos(
         "package A.B.C; import \"main2\";",
@@ -191,7 +210,7 @@ end
         ),
         "A",
     );
-    @test n.packages["A"].submodules[1].submodules[1].internal_imports == Set([".DPB"])
+    @test n.packages["A"].submodules[1].submodules[1].internal_imports == Set(["...APB"])
 
     s, d, n = simple_namespace_from_protos(
         "package A.B; import \"main2\";",
@@ -200,5 +219,6 @@ end
         ),
         "A",
     );
-    @test n.packages["A"].submodules[1].internal_imports == Set([".CPB.DPB"])
+    @test n.packages["A"].submodules[1].internal_imports == Set(["..APB"])
+    @test n.packages["A"].submodules[1].name == "BPB"
 end
