@@ -19,9 +19,8 @@ function translate_simple_proto(str::String, options=Options())
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
-    imports = Set{String}(Iterators.map(i->namespace(d[i]), import_paths(p)))
     ctx = Context(
-        p, r.import_path, imports, d,
+        p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
         options
@@ -45,9 +44,8 @@ function translate_simple_proto(str::String, deps::Dict{String,String}, options=
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
-    imports = Set{String}(Iterators.map(i->namespace(d[i]), import_paths(p)))
     ctx = Context(
-        p, r.import_path, imports, d,
+        p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
         options
@@ -94,8 +92,8 @@ end
     @testset "Minimal proto file with package imports" begin
         s, p, ctx = translate_simple_proto("import \"path/to/a\";", Dict("path/to/a" => "package p;"), Options(always_use_modules=false))
         @test s == """
-        include($(repr(joinpath("p", "P_PB.jl"))))
-        import .P_PB
+        include($(repr(joinpath("p", "PPB.jl"))))
+        import .PPB
         import ProtocolBuffers as PB
         using ProtocolBuffers: OneOf
         using EnumX: @enumx"""
@@ -103,8 +101,8 @@ end
         s, p, ctx = translate_simple_proto("import \"path/to/a\";", Dict("path/to/a" => "package p;"), Options(always_use_modules=true))
         @test s == """
         module main_pb
-        include($(repr(joinpath("p", "P_PB.jl"))))
-        import .P_PB
+        include($(repr(joinpath("p", "PPB.jl"))))
+        import .PPB
         import ProtocolBuffers as PB
         using ProtocolBuffers: OneOf
         using EnumX: @enumx

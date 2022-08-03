@@ -13,6 +13,7 @@ mutable struct ParserState
     nt::Tokens.Token
     nnt::Tokens.Token
     errored::Bool
+    is_proto3::Bool
 end
 
 function readtoken(ps::ParserState)
@@ -38,6 +39,7 @@ function ParserState(l::Lexer)
         Tokens.Token(Tokens.UNINIT, Tokens.NO_ERROR, (0,0), (0,0), ""),
         Tokens.Token(Tokens.UNINIT, Tokens.NO_ERROR, (0,0), (0,0), ""),
         Tokens.Token(Tokens.UNINIT, Tokens.NO_ERROR, (0,0), (0,0), ""),
+        false,
         false,
     )
     readtoken(ps)
@@ -208,9 +210,41 @@ end
 
 struct ProtoFilePreamble
     isproto3::Bool
-    namespace::String
+    namespace::Vector{String}
+    julia_namespace::Vector{String}
     options::Dict{String,Union{String,Dict{String,String}}}
     imports::Vector{ProtoImportedPackage}
+end
+
+function julia_namespace(namespace::Vector{<:AbstractString})
+    isempty(namespace) && return namespace
+    seen = Set{String}()
+    n = 1
+    out = Vector{String}(undef, length(namespace))
+    for part in namespace
+        module_name = string(replace(titlecase(part), "_" => ""), "PB")
+        _module_name = module_name
+        i = 1
+        while _module_name in seen
+            _module_name = string(module_name, string(i))
+            i += 1
+        end
+        push!(seen, _module_name)
+        out[n] = _module_name
+        n += 1
+    end
+    return out
+end
+
+function check_name_collisions(packages, julia_packages, definitions, package_file, definitions_file)
+    collisions = intersect(packages, keys(definitions))
+    append!(collisions, intersect(julia_packages, keys(definitions)))
+    !isempty(collisions) &&
+        throw(error(string(
+            "Proto package `$(join(packages, '.'))` @ '$(package_file)' which would produce (nested) ",
+            "Julia modules $(julia_packages), clashes with names of following top-level definitions $(string.(collisions))",
+            package_file == definitions_file ? "" : " from '$(definitions_file)'"
+        )))
 end
 
 struct ProtoFile
@@ -234,6 +268,7 @@ function parse_proto_file(ps::ParserState)
     else
         proto_version_string = "proto2"
     end
+    ps.is_proto3 = proto_version_string == "proto3"
 
     definitions = Dict{String,Union{MessageType, EnumType, ServiceType}}()
     extends = ExtendType[]
@@ -267,13 +302,17 @@ function parse_proto_file(ps::ParserState)
             definitions[type.name] = type
         end
     end
+    package_parts = split(package_identifier, '.', keepempty=false)
+    julia_package_parts = julia_namespace(package_parts)
     preamble = ProtoFilePreamble(
         proto_version_string=="proto3",
-        package_identifier,
+        package_parts,
+        julia_package_parts,
         options,
         imported_packages,
     )
-    external_references = postprocess_types!(definitions, preamble)
+    check_name_collisions(package_parts, julia_package_parts, definitions, filepath(ps.l), filepath(ps.l))
+    external_references = postprocess_types!(definitions)
     topologically_sorted, cyclic_definitions = _topological_sort(definitions, external_references)
     return ProtoFile(
         filepath(ps.l),

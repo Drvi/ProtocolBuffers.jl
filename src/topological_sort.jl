@@ -1,5 +1,7 @@
 # to hook in, import and define get_upstream_dependencies! methods for your types
-function get_upstream_dependencies!(definition, upstreams) end
+function get_upstream_dependencies!(definition, upstreams)
+    throw(MethodError(get_upstream_dependencies!, (typeof(definition), typeof(upstreams))))
+end
 
 function _topological_sort(definitions, ignored_keys::Set{String})
     has_ignored_keys = !isempty(ignored_keys)
