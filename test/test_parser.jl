@@ -1,6 +1,6 @@
 using ProtocolBuffers
-using ProtocolBuffers.CodeGenerators: Options, ResolvedProtoFile, translate, namespace
-using ProtocolBuffers.CodeGenerators: import_paths, Context
+using ProtocolBuffers.CodeGenerators: Options, ResolvedProtoFile, translate, namespace, jl_typename
+using ProtocolBuffers.CodeGenerators: import_paths, Context, get_all_transitive_imports
 using ProtocolBuffers.Parsers: parse_proto_file, ParserState, Parsers
 using ProtocolBuffers.Lexers: Lexer
 using Test
@@ -14,10 +14,12 @@ function translate_simple_proto(str::String, options=Options())
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
+    imports = get_all_transitive_imports(p, d)
     ctx = Context(
         p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
+        imports,
         options
     )
     return s, p, ctx
@@ -39,10 +41,12 @@ function translate_simple_proto(str::String, deps::Dict{String,String}, options=
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
+    imports = get_all_transitive_imports(p, d)
     ctx = Context(
         p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
+        imports,
         options
     )
     return s, d, ctx
@@ -94,7 +98,7 @@ end
         @test p.definitions["A"].fields[1].type isa Parsers.ReferencedType
         # the type name is expanded to include the enclosing type
         @test p.definitions["A"].fields[1].type.name == "A.B"
-        @test p.definitions["A"].fields[1].type.enclosing_type == "A"
+        p.definitions["A"].fields[1].type.reference_type == Parsers.MESSAGE
     end
 
     @testset "Single nested non-empty message proto file with namespaced field" begin
@@ -107,8 +111,7 @@ end
         @test p.definitions["A"].fields[1].name == "b"
         @test p.definitions["A"].fields[1].type isa Parsers.ReferencedType
         @test p.definitions["A"].fields[1].type.name == "A.B"
-        @test p.definitions["A"].fields[1].type.namespace == "A"
-        @test p.definitions["A"].fields[1].type.namespace_is_type
+        @test p.definitions["A"].fields[1].type.reference_type == Parsers.MESSAGE
     end
 
     @testset "Single self-referential message proto file" begin
@@ -158,7 +161,7 @@ end
         @test p.definitions["A"].fields[1].type isa Parsers.ReferencedType
         @test p.definitions["A"].fields[1].type.name == "B"
         # we were able to infer the type of the dependency by finding it among imported modules
-        @test p.definitions["A"].fields[1].type.type_name == Parsers.MESSAGE
+        @test p.definitions["A"].fields[1].type.reference_type == Parsers.MESSAGE
     end
 
     @testset "Single message with package-imported field type" begin
@@ -176,9 +179,8 @@ end
         @test p.definitions["A"].fields[1].type isa Parsers.ReferencedType
         @test p.definitions["A"].fields[1].type.name == "B"
         # we were able to infer the type of the dependency by finding it among imported modules
-        @test p.definitions["A"].fields[1].type.type_name == Parsers.MESSAGE
-        # namespace is "" because B was not prefixed
-        @test p.definitions["A"].fields[1].type.namespace == ""
+        @test p.definitions["A"].fields[1].type.reference_type == Parsers.MESSAGE
+        @test p.definitions["A"].fields[1].type.package_namespace === "PPB"
     end
 
     @testset "Single message with package-imported namespaced field type" begin
@@ -195,8 +197,9 @@ end
         @test p.definitions["A"].fields[1].name == "b"
         @test p.definitions["A"].fields[1].type isa Parsers.ReferencedType
         @test p.definitions["A"].fields[1].type.name == "B"
-        @test p.definitions["A"].fields[1].type.type_name == Parsers.MESSAGE
-        @test p.definitions["A"].fields[1].type.namespace == "P"
+        @test p.definitions["A"].fields[1].type.reference_type == Parsers.MESSAGE
+        @test p.definitions["A"].fields[1].type.package_namespace == "PPB"
+        @test p.definitions["A"].fields[1].type.package_import_path == "path/to/a"
     end
 
     @testset "Message with a field that has to be namespaced to avoid name collision" begin
@@ -215,15 +218,17 @@ end
         @test p.definitions["A"].fields[1].number == 1
         @test p.definitions["A"].fields[1].type isa Parsers.ReferencedType
         @test p.definitions["A"].fields[1].type.name == "B"
-        @test p.definitions["A"].fields[1].type.type_name == Parsers.MESSAGE
-        @test p.definitions["A"].fields[1].type.namespace == "P"
+        @test p.definitions["A"].fields[1].type.reference_type == Parsers.MESSAGE
+        @test p.definitions["A"].fields[1].type.package_namespace == "PPB"
+        @test p.definitions["A"].fields[1].type.package_import_path == "path/to/a"
 
         @test p.definitions["A"].fields[2].name == "b_local"
         @test p.definitions["A"].fields[2].number == 2
         @test p.definitions["A"].fields[2].type isa Parsers.ReferencedType
         @test p.definitions["A"].fields[2].type.name == "B"
-        @test p.definitions["A"].fields[2].type.type_name == Parsers.MESSAGE
-        @test p.definitions["A"].fields[2].type.namespace == ""
+        @test p.definitions["A"].fields[2].type.reference_type == Parsers.MESSAGE
+        @test p.definitions["A"].fields[2].type.package_namespace === nothing
+        @test p.definitions["A"].fields[2].type.package_import_path === nothing
     end
 
     @testset "Referenced Types are assumed to refer to messages defined within the parent message" begin
@@ -244,11 +249,8 @@ end
             """
         )
         @test p.definitions["A"].fields[1].type.name == "A.B"
-        @test p.definitions["A"].fields[1].type.enclosing_type == "A"
         @test p.definitions["A"].fields[2].fields[1].type.name == "A.B"
-        @test p.definitions["A"].fields[2].fields[1].type.enclosing_type == "A"
         @test p.definitions["A"].fields[3].type.valuetype.name == "A.B"
-        @test p.definitions["A"].fields[3].type.valuetype.enclosing_type == "A"
     end
 
     @testset "Referenced Types are correctly namespaced when nested" begin
@@ -266,15 +268,12 @@ end
             """
         )
         @test p.definitions["A"].fields[1].type.name == "A.B"
-        @test p.definitions["A"].fields[1].type.enclosing_type == "A"
         @test p.definitions["A"].fields[1].number == 3
 
         @test p.definitions["A.B"].fields[1].type.name == "A"
-        @test p.definitions["A.B"].fields[1].type.enclosing_type === nothing
         @test p.definitions["A.B"].fields[1].number == 1
 
         @test p.definitions["A.B.B"].fields[1].type.name == "A.B.B"
-        @test p.definitions["A.B.B"].fields[1].type.enclosing_type == "A.B"
         @test p.definitions["A.B.B"].fields[1].number == 2
 
         s, p, ctx = translate_simple_proto(
@@ -314,57 +313,6 @@ end
         )
     end
 
-    @testset "https://github.com/protocolbuffers/protobuf/issues/4594" begin
-        s, d, ctx = translate_simple_proto("""
-            package bar;
-
-            import "Foo.proto";
-
-            message Bar {
-                Foo foo1 = 1;
-                Foo.Foo foo2 = 2;
-                Foo.Foo.Foo foo3 = 3;
-            }
-            """,
-            Dict("Foo.proto" => """
-            package Foo;
-            message Foo {
-                message Foo {
-                    int32 foo = 1;
-                }
-            }
-            """),
-        )
-        @test d["main"].proto_file.definitions["Bar"].fields[1].type.final_typename == "FooPB.Foo"
-        @test d["main"].proto_file.definitions["Bar"].fields[2].type.final_typename == "FooPB.Foo"
-        @test d["main"].proto_file.definitions["Bar"].fields[3].type.final_typename == "FooPB.Foo.Foo"
-
-        s, d, ctx = translate_simple_proto("""
-            package Foo;
-
-            import "Foo.proto";
-
-            message Bar {
-                Foo foo1 = 1;
-                Foo.Foo foo2 = 2;
-                Foo.Foo.Foo foo3 = 3;
-            }
-            """,
-            Dict("Foo.proto" => """
-            package Foo;
-
-            message Foo {
-                message Foo {
-                    int32 foo = 1;
-                }
-            }
-            """),
-        )
-        @test d["main"].proto_file.definitions["Bar"].fields[1].type.final_typename == "FooPB.Foo"
-        @test d["main"].proto_file.definitions["Bar"].fields[2].type.final_typename == "FooPB.Foo"
-        @test d["main"].proto_file.definitions["Bar"].fields[3].type.final_typename == "FooPB.Foo.Foo"
-    end
-
     @testset "Messages are not allowed to name-clash with modules" begin
         @test_throws ErrorException translate_simple_proto("""
             package Foo;
@@ -393,8 +341,8 @@ end
             Dict("main2" => "package Foo;"))
     end
 
-    @testset "Fileds can't be named as the parent module" begin
-        translate_simple_proto("""
+    @testset "Leading dot means resolving starts from outermost scope" begin
+        s, d, ctx = translate_simple_proto("""
             message A {
                 message B {
                     message A {
@@ -404,7 +352,30 @@ end
                 }
             }
             """)
-        @test d.definitions["A.B.A"].fields[1].final_typename == "var\"A.B.A\""
-        @test d.definitions["A.B.A"].fields[2].final_typename == "A"
+        @test d.definitions["A.B.A"].fields[1].type.name == "A.B.A"
+        @test d.definitions["A.B.A"].fields[2].type.name == "A"
+
+        s, d, ctx = translate_simple_proto("""
+            import "main2";
+            message T {
+                G.A.B.A inner = 1;
+                .G.A outer = 2;
+                G.A also_outer = 3;
+            }
+            """,
+            Dict("main2" => """
+            package G;
+            message A {
+                message B {
+                    message A {
+                    }
+                }
+            }
+            """
+            ))
+        p = d["main"].proto_file
+        @test p.definitions["T"].fields[1].type.name == "A.B.A"
+        @test p.definitions["T"].fields[2].type.name == "A"
+        @test p.definitions["T"].fields[3].type.name == "A"
     end
 end

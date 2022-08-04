@@ -150,7 +150,8 @@ function translate(io, rp::ResolvedProtoFile, file_map::Dict{String,ResolvedProt
     println(io, "# original file: ", p.filepath," (proto", p.preamble.isproto3 ? '3' : '2', " syntax)")
     println(io)
 
-    ctx = Context(p, rp.import_path, file_map, copy(p.cyclic_definitions), Ref{String}(), options)
+    transitive_imports = get_all_transitive_imports(p, file_map)
+    ctx = Context(p, rp.import_path, file_map, copy(p.cyclic_definitions), Ref{String}(), transitive_imports, options)
     if !is_namespaced(p)
         options.always_use_modules && println(io, "module $(replace(proto_script_name(p), ".jl" => ""))")
         options.always_use_modules && println(io)

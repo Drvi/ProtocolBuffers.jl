@@ -29,9 +29,8 @@ end
 #       when the rest of the file (and other, imported files) are parsed.
 mutable struct ReferencedType <: AbstractProtoType
     name::String
-    final_typename::String
-    type_namespace::Union{Nothing,String}
     package_namespace::Union{Nothing,String}
+    package_import_path::Union{Nothing,String}
     reference_type::TypeOfReference
     resolve_from_innermost::Bool
     resolved::Bool
@@ -39,9 +38,9 @@ end
 
 function ReferencedType(name::String)
     if startswith(name, '.')
-        return ReferencedType(name[2:end], "", nothing, nothing, UNKNOWN, false, false)
+        return ReferencedType(name[2:end], nothing, nothing, UNKNOWN, false, false)
     else
-        return ReferencedType(name, "", nothing, nothing, UNKNOWN, true, false)
+        return ReferencedType(name, nothing, nothing, UNKNOWN, true, false)
     end
 end
 struct RPCType <: AbstractProtoType

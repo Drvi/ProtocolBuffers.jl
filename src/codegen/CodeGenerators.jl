@@ -36,6 +36,7 @@ struct Context
     file_map::Dict{String,ResolvedProtoFile}
     _curr_cyclic_defs::Set{String}
     _toplevel_name::Ref{String}
+    transitive_imports::Set{String}
     options::Options
 end
 

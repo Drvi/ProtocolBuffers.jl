@@ -237,8 +237,10 @@ function julia_namespace(namespace::Vector{<:AbstractString})
 end
 
 function check_name_collisions(packages, julia_packages, definitions, package_file, definitions_file)
-    collisions = intersect(packages, keys(definitions))
-    append!(collisions, intersect(julia_packages, keys(definitions)))
+    levels_to_check = length(packages) <= 1 ? @view(packages[1:length(packages)]) : @view(packages[[begin,end]])
+    julia_levels_to_check = length(julia_packages) <= 1 ? @view(julia_packages[1:length(julia_packages)]) : @view(julia_packages[[begin,end]])
+    collisions = intersect(levels_to_check, keys(definitions))
+    append!(collisions, intersect(julia_levels_to_check, keys(definitions)))
     !isempty(collisions) &&
         throw(error(string(
             "Proto package `$(join(packages, '.'))` @ '$(package_file)' which would produce (nested) ",
@@ -312,7 +314,7 @@ function parse_proto_file(ps::ParserState)
         imported_packages,
     )
     check_name_collisions(package_parts, julia_package_parts, definitions, filepath(ps.l), filepath(ps.l))
-    external_references = postprocess_types!(definitions)
+    external_references = postprocess_types!(definitions, package_identifier)
     topologically_sorted, cyclic_definitions = _topological_sort(definitions, external_references)
     return ProtoFile(
         filepath(ps.l),

@@ -12,6 +12,19 @@ proto_module_name(p::ProtoFile) = proto_module_name(p.filepath)
 proto_script_name(p::ProtoFile) = proto_script_name(p.filepath)
 proto_script_path(p::ProtoFile) = proto_script_path(p.filepath)
 import_paths(p::ProtoFile) = (i.path for i in p.preamble.imports)
+function get_all_transitive_imports(proto_file, file_map)
+    out = Set{String}()
+    _get_all_transitive_imports!(out, proto_file, file_map)
+    return out
+end
+function _get_all_transitive_imports!(seen::Set{String}, proto_file::ProtoFile, file_map, depth=0)
+    for i in proto_file.preamble.imports
+        ((depth > 1) && i.import_option != Parsers.PUBLIC) && continue
+        push!(seen, i.path)
+        _get_all_transitive_imports!(seen, file_map[i.path].proto_file, file_map, depth+1)
+    end
+end
+
 function namespaced_top_include(p::ProtoFile)
     if is_namespaced(p)
         top = first(namespace(p))
@@ -35,23 +48,6 @@ proto_script_path(p::ResolvedProtoFile) = proto_script_path(p.proto_file)
 
 proto_package_name(p) = first(julia_namespace(p))
 rel_import_path(file, root_path) = relpath(joinpath(root_path, "..", namespaced_top_include(file)), joinpath(root_path))
-
-# function internal_module_relative_import_path(importer, importee)
-#     importer_modules = split(importer, '.')
-#     importee_modules = split(importee, '.')
-#     n = length(importer_modules)
-#     m = length(importee_modules)
-#     # Must have common root and not importing itself
-#     @assert importer_modules[1] == importee_modules[1] && importer !== importee
-#     io = IOBuffer()
-#     # Eat the common part of the path
-#     i = 1 + count(p->p[1]==p[2], zip(importer_modules, importee_modules))
-#     # Ascend from the importer to the closest common ancestor
-#     foreach(_->print(io, '.'), i:n)
-#     # Descend from the common anscestor to the importee
-#     foreach(j->print(io, '.', proto_module_name(importee_modules[j])), i-(n>m):m)
-#     return String(take!(io))
-# end
 
 struct ProtoModule
     name::String
@@ -191,7 +187,7 @@ function validate_search_directories!(search_directories::Vector{String}, includ
 end
 
 function validate_proto_file_paths!(relative_paths::Vector{<:AbstractString}, search_directories)
-    @assert !isempty(relative_paths)
+    isempty(relative_paths) && error("At least one relative path must be provided, received none.")
     unique!(map!(normpath, relative_paths, relative_paths))
     full_paths = copy(relative_paths)
     proto_files_not_within_reach = String[]

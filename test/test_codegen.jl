@@ -19,10 +19,12 @@ function translate_simple_proto(str::String, options=Options())
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
+    imports = CodeGenerators.get_all_transitive_imports(p, d)
     ctx = Context(
         p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
+        imports,
         options
     )
     return s, p, ctx
@@ -44,10 +46,12 @@ function translate_simple_proto(str::String, deps::Dict{String,String}, options=
     translate(buf, r, d, options)
     s = String(take!(buf))
     s = join(filter!(!startswith(r"#|$^"), split(s, '\n')), '\n')
+    imports = CodeGenerators.get_all_transitive_imports(p, d)
     ctx = Context(
         p, r.import_path, d,
         copy(p.cyclic_definitions),
         Ref(get(p.sorted_definitions, length(p.sorted_definitions), "")),
+        imports,
         options
     )
     return s, d, ctx
