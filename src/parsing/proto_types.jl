@@ -49,7 +49,7 @@ struct RPCType <: AbstractProtoType
     request_type::ReferencedType
     response_stream::Bool
     response_type::ReferencedType
-    options::Dict{String,Union{String,Dict{String,String}}}
+    options::Dict{String,Union{String,Dict{String}}}
 end
 
 function lowercase_first(s)
@@ -73,13 +73,13 @@ struct FieldType{T<:AbstractProtoType} <: AbstractProtoFieldType
     type::AbstractProtoType
     name::String
     number::Int
-    options::Dict{String,Union{String,Dict{String,String}}}
+    options::Dict{String,Union{String,Dict{String}}}
 end
 
 struct OneOfType <: AbstractProtoFieldType
     name::String
     fields::Vector{AbstractProtoFieldType}
-    options::Dict{String,Union{String,Dict{String,String}}}
+    options::Dict{String,Union{String,Dict{String}}}
 end
 
 struct ExtendType <: AbstractProtoFieldType
@@ -90,7 +90,7 @@ end
 struct MessageType <: AbstractProtoType
     name::String
     fields::Vector{AbstractProtoFieldType}
-    options::Dict{String,Union{String,Dict{String,String}}}
+    options::Dict{String,Union{String,Dict{String}}}
     reserved_nums::Vector{Union{Int,UnitRange{Int}}}
     reserved_names::Vector{String}
     extensions::Vector{Union{Int,UnitRange{Int}}}
@@ -108,15 +108,15 @@ end
 struct ServiceType <: AbstractProtoType
     name::String
     rpcs::Vector{RPCType}
-    options::Dict{String,Union{String,Dict{String,String}}}
+    options::Dict{String,Union{String,Dict{String}}}
 end
 
 struct EnumType <: AbstractProtoType
     name::String
     element_names::Vector{Symbol}
     element_values::Vector{Int}
-    options::Dict{String,Union{String,Dict{String,String}}}
-    field_options::Dict{String,Dict{String,String}}
+    options::Dict{String,Union{String,Dict{String}}}
+    field_options::Dict{String,Union{String,Dict{String}}}
 end
 
 # Called in parse_oneof_type, parse_message_type and parse_extend_type
@@ -141,7 +141,7 @@ function parse_field(ps::ParserState)
         error("Invalid field number $number for field $name")
     end
 
-    options = Dict{String,Union{String,Dict{String,String}}}()
+    options = Dict{String,Union{String,Dict{String}}}()
     if label == REPEATED && type isa AbstractProtoNumericType
         options["packed"] = "true"
     end
@@ -228,7 +228,7 @@ function parse_oneof_type(ps::ParserState, definitions, name_prefix="")
     name = val(expectnext(ps, Tokens.IDENTIFIER))
 
     fields = AbstractProtoFieldType[]
-    options = Dict{String,Union{String,Dict{String,String}}}()
+    options = Dict{String,Union{String,Dict{String}}}()
 
     expectnext(ps, Tokens.LBRACE)
     while !accept(ps, Tokens.RBRACE)
@@ -251,8 +251,8 @@ end
 function parse_enum_type(ps::ParserState, name_prefix="")
     name = val(expectnext(ps, Tokens.IDENTIFIER))
 
-    options = Dict{String,Union{String,Dict{String,String}}}()
-    field_options = Dict{String,Union{String,Dict{String,String}}}()
+    options = Dict{String,Union{String,Dict{String}}}()
+    field_options = Dict{String,Union{String,Dict{String}}}()
     element_names = Symbol[]
     element_values = Int[]
 
@@ -267,7 +267,7 @@ function parse_enum_type(ps::ParserState, name_prefix="")
             expectnext(ps, Tokens.EQ)
             push!(element_values, parse_integer_value(ps))
             if accept(ps, Tokens.LBRACKET)
-                parse_field_options!(ps, get!(field_options, element_name, Dict{String,String}()))
+                parse_field_options!(ps, get!(field_options, element_name, Dict{String,Union{String,Dict{String}}}()))
             end
             expectnext(ps, Tokens.SEMICOLON)
         else
@@ -312,7 +312,7 @@ end
 
 function _parse_message_body(ps::ParserState, name, definitions, name_prefix)
     fields = []
-    options = Dict{String,Union{String,Dict{String,String}}}()
+    options = Dict{String,Union{String,Dict{String}}}()
     reserved_nums = Vector{Union{Int,UnitRange{Int}}}()
     reserved_names = Vector{String}()
     extensions = Vector{Union{Int,UnitRange{Int}}}()
@@ -364,7 +364,7 @@ end
 # We consumed RPC
 function parse_rpc_type(ps::ParserState)
     name = val(expectnext(ps, Tokens.IDENTIFIER))
-    options = Dict{String,Union{String,Dict{String,String}}}()
+    options = Dict{String,Union{String,Dict{String}}}()
 
     expectnext(ps, Tokens.LPAREN)
     request_stream = accept(ps, Tokens.STREAM)
@@ -392,7 +392,7 @@ end
 function parse_service_type(ps::ParserState)
     name = val(expectnext(ps, Tokens.IDENTIFIER))
     rpcs = RPCType[]
-    options = Dict{String,Union{String,Dict{String,String}}}()
+    options = Dict{String,Union{String,Dict{String}}}()
 
     expectnext(ps, Tokens.LBRACE)
     while !accept(ps, Tokens.RBRACE)
