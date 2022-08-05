@@ -250,5 +250,4 @@ function parse_proto_file(ps::ParserState)
     )
 end
 
-
 end # module

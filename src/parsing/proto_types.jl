@@ -119,6 +119,16 @@ struct EnumType <: AbstractProtoType
     field_options::Dict{String,Union{String,Dict{String}}}
 end
 
+function unsafe_name(ps)
+    pk = peekkind(ps)
+    if Tokens.isident(pk) || Tokens.is_reserved_word(pk)
+        return val(readtoken(ps))
+    else
+        ps.errored = true
+        error("Invalid name token $(peektoken(ps))")
+    end
+end
+
 # Called in parse_oneof_type, parse_message_type and parse_extend_type
 # after we handled GROUP, EXTEND, OPTION, RESERVED and EXTENSIONS
 function parse_field(ps::ParserState)
@@ -127,13 +137,7 @@ function parse_field(ps::ParserState)
             accept(ps, Tokens.REQUIRED) ? REQUIRED :
                                           DEFAULT
     type = parse_type(ps)
-    pk = peekkind(ps)
-    if Tokens.isident(pk) || Tokens.is_reserved_word(pk)
-        name = val(readtoken(ps)) # drop quotes
-    else
-        ps.errored = true
-        error("Invalid field name token $(peektoken(ps))")
-    end
+    name = unsafe_name(ps)
     expectnext(ps, Tokens.EQ)
     number = parse(Int, val(expectnext(ps, Tokens.DEC_INT_LIT)))
     if !(1 <= number <= MAX_FIELD_NUMBER) || (19000 <= number <= 19999)
@@ -150,6 +154,12 @@ function parse_field(ps::ParserState)
     return FieldType{typeof(type)}(label, type, name, number, options)
 end
 
+function peek_group(ps)
+    nk, nnk = dpeekkind(ps)
+    return (nk in (Tokens.OPTIONAL, Tokens.REQUIRED, Tokens.REPEATED) && nnk == Tokens.GROUP) ||
+           (nk == Tokens.GROUP && (Tokens.isident(nnk) || Tokens.is_reserved_word(nnk)))
+end
+
 # Can appear in parse_message_type, parse_oneof_type and parse_extend_type
 function parse_group(ps, definitions=Dict{String,Union{MessageType, EnumType, ServiceType}}(), name_prefix="")
     label = accept(ps, Tokens.REPEATED) ? REPEATED :
@@ -157,8 +167,8 @@ function parse_group(ps, definitions=Dict{String,Union{MessageType, EnumType, Se
             accept(ps, Tokens.REQUIRED) ? REQUIRED :
                                           DEFAULT
     expectnext(ps, Tokens.GROUP)
-    name = val(expectnext(ps, Tokens.IDENTIFIER))
-    @assert isuppercase(first(name))
+    name = unsafe_name(ps)
+    @assert isuppercase(first(name)) "Group fields must start with a capital letter, got $name"
     expectnext(ps, Tokens.EQ)
     number = parse(Int, val(expectnext(ps, Tokens.DEC_INT_LIT)))
     message = _parse_message_body(ps, name, definitions, name_prefix)
@@ -225,7 +235,7 @@ end
 
 # We consumed ONEOF
 function parse_oneof_type(ps::ParserState, definitions, name_prefix="")
-    name = val(expectnext(ps, Tokens.IDENTIFIER))
+    name = unsafe_name(ps)
 
     fields = AbstractProtoFieldType[]
     options = Dict{String,Union{String,Dict{String}}}()
@@ -236,7 +246,7 @@ function parse_oneof_type(ps::ParserState, definitions, name_prefix="")
         if accept(ps, Tokens.OPTION)
             _parse_option!(ps, options)
             expectnext(ps, Tokens.SEMICOLON)
-        elseif nk == Tokens.GROUP || nnk == Tokens.GROUP
+        elseif (nk == Tokens.GROUP && (Tokens.isident(nnk) || Tokens.is_reserved_word(nnk)))
             group = parse_group(ps, definitions, _dot_join(name_prefix, name))
             push!(fields, group)
             definitions[group.type.name] = group.type
@@ -249,7 +259,7 @@ end
 
 # We consumed ENUM
 function parse_enum_type(ps::ParserState, name_prefix="")
-    name = val(expectnext(ps, Tokens.IDENTIFIER))
+    name = unsafe_name(ps)
 
     options = Dict{String,Union{String,Dict{String}}}()
     field_options = Dict{String,Union{String,Dict{String}}}()
@@ -293,8 +303,7 @@ function parse_extend_type(ps::ParserState, definitions, name_prefix="")
 
     expectnext(ps, Tokens.LBRACE)
     while !accept(ps, Tokens.RBRACE)
-        nk, nnk = dpeekkind(ps)
-        if nk == Tokens.GROUP || nnk == Tokens.GROUP
+        if peek_group(ps)
             group = parse_group(ps, definitions, name_prefix)
             definitions[group.name] = group.type
         else
@@ -306,7 +315,7 @@ end
 
 # We consumed MESSAGE
 function parse_message_type(ps::ParserState, definitions=Dict{String,Union{MessageType, EnumType, ServiceType}}(), name_prefix="")
-    name = val(expectnext(ps, Tokens.IDENTIFIER))
+    name = unsafe_name(ps)
     return _parse_message_body(ps, name, definitions, name_prefix)
 end
 
@@ -320,14 +329,7 @@ function _parse_message_body(ps::ParserState, name, definitions, name_prefix)
 
     name = _dot_join(name_prefix, name)
     expectnext(ps, Tokens.LBRACE)
-    # TODO: Verify that we are doing the right thing here:
-    #   message NestedMessage { string f = 1; }
-    #   message MainMessage {
-    #       NestedMessage a = 1; // We use the `MainMessage.NestedMessage` here
-    #       message NestedMessage { int g = 1; }
-    #   }
     while true
-        nk, nnk = dpeekkind(ps)
         if accept(ps, Tokens.OPTION)
             _parse_option!(ps, options)
             expectnext(ps, Tokens.SEMICOLON)
@@ -347,7 +349,7 @@ function _parse_message_body(ps::ParserState, name, definitions, name_prefix)
             push!(fields, parse_oneof_type(ps, definitions, name))
         elseif accept(ps, Tokens.EXTEND)
             push!(extends, parse_extend_type(ps, definitions, name))
-        elseif nk == Tokens.GROUP || nnk == Tokens.GROUP
+        elseif peek_group(ps)
             group = parse_group(ps, definitions, name)
             push!(fields, group)
             definitions[group.type.name] = group.type
@@ -363,7 +365,7 @@ end
 
 # We consumed RPC
 function parse_rpc_type(ps::ParserState)
-    name = val(expectnext(ps, Tokens.IDENTIFIER))
+    name = unsafe_name(ps)
     options = Dict{String,Union{String,Dict{String}}}()
 
     expectnext(ps, Tokens.LPAREN)
@@ -390,7 +392,7 @@ end
 
 # We consumed SERVICE
 function parse_service_type(ps::ParserState)
-    name = val(expectnext(ps, Tokens.IDENTIFIER))
+    name = unsafe_name(ps)
     rpcs = RPCType[]
     options = Dict{String,Union{String,Dict{String}}}()
 
