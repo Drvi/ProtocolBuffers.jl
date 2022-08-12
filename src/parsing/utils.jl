@@ -122,7 +122,7 @@ get_type_name(t::EnumType)       = t.name
 get_type_name(t::ServiceType)    = t.name
 get_type_name(::StringType)      = nothing
 get_type_name(::BytesType)       = nothing
-get_type_name(::MapType)         = nothing
+get_type_name(t::MapType)        = get_type_name(t.valuetype)
 
 function get_upstream_dependencies!(t::ServiceType, out)
     for rpc in t.rpcs
@@ -132,10 +132,6 @@ function get_upstream_dependencies!(t::ServiceType, out)
     return nothing
 end
 function get_upstream_dependencies!(::EnumType, out)
-    return nothing
-end
-function get_upstream_dependencies!(t::GroupType, out)
-    get_upstream_dependencies!(t.type, out)
     return nothing
 end
 function get_upstream_dependencies!(t::MessageType, out)
