@@ -134,41 +134,18 @@ end
 struct ProtoFilePreamble
     isproto3::Bool
     namespace::Vector{String}
-    julia_namespace::Vector{String}
     options::Dict{String,Union{String,Dict{String}}}
     imports::Vector{ProtoImportedPackage}
 end
 
-function julia_namespace(namespace::Vector{<:AbstractString})
-    isempty(namespace) && return namespace
-    seen = Set{String}()
-    n = 1
-    out = Vector{String}(undef, length(namespace))
-    for part in namespace
-        module_name = string(replace(titlecase(part), "_" => ""), "PB")
-        _module_name = module_name
-        i = 1
-        while _module_name in seen
-            _module_name = string(module_name, string(i))
-            i += 1
-        end
-        push!(seen, _module_name)
-        out[n] = _module_name
-        n += 1
-    end
-    return out
-end
-
-function check_name_collisions(packages, julia_packages, definitions, package_file, definitions_file)
+function check_name_collisions(packages, definitions, package_file, definitions_file)
     levels_to_check = length(packages) <= 1 ? @view(packages[1:length(packages)]) : @view(packages[[begin,end]])
-    julia_levels_to_check = length(julia_packages) <= 1 ? @view(julia_packages[1:length(julia_packages)]) : @view(julia_packages[[begin,end]])
     collisions = intersect(levels_to_check, keys(definitions))
-    append!(collisions, intersect(julia_levels_to_check, keys(definitions)))
     !isempty(collisions) &&
         throw(error(string(
-            "Proto package `$(join(packages, '.'))` @ '$(package_file)' which would produce (nested) ",
-            "Julia modules $(julia_packages), clashes with names of following top-level definitions $(string.(collisions))",
-            package_file == definitions_file ? "" : " from '$(definitions_file)'"
+            "Proto package `$(join(packages, '.'))` @ '$(package_file)', clashes with names of ",
+            "following top-level definitions $(string.(collisions))",
+            package_file == definitions_file ? "." : " from '$(definitions_file)'."
         )))
 end
 
@@ -229,15 +206,13 @@ function parse_proto_file(ps::ParserState)
         end
     end
     package_parts = split(package_identifier, '.', keepempty=false)
-    julia_package_parts = julia_namespace(package_parts)
     preamble = ProtoFilePreamble(
         ps.is_proto3,
         package_parts,
-        julia_package_parts,
         options,
         imported_packages,
     )
-    check_name_collisions(package_parts, julia_package_parts, definitions, filepath(ps.l), filepath(ps.l))
+    check_name_collisions(package_parts, definitions, filepath(ps.l), filepath(ps.l))
     external_references = postprocess_types!(definitions, package_identifier)
     topologically_sorted, cyclic_definitions = _topological_sort(definitions, external_references)
     return ProtoFile(

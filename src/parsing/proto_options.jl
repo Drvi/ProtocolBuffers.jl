@@ -1,8 +1,8 @@
 
 function _parse_identifier_with_url(ps)
-    ident = expectnext(ps, Tokens.IDENTIFIER)
+    ident = val(expectnext(ps, Tokens.IDENTIFIER))
     if accept(ps, Tokens.FORWARD_SLASH)
-        ident = string(ident, "/", expectnext(ps, Tokens.IDENTIFIER))
+        ident = string(ident, "/", val(expectnext(ps, Tokens.IDENTIFIER)))
     end
     return ident
 end
@@ -23,33 +23,34 @@ function _parse_option_value(ps) # TODO: proper value parsing with validation
 end
 
 function _parse_option_name(ps)
+    buf = IOBuffer()
     option_name = ""
     last_name_part = ""
     prev_had_parens = false
     while true
         if accept(ps, Tokens.LPAREN)
-            option_name *= string("(", _parse_identifier_with_url(ps), ")")
+            write(buf, "(", _parse_identifier_with_url(ps), ")")
             expectnext(ps, Tokens.RPAREN)
             prev_had_parens = true
         elseif accept(ps, Tokens.LBRACKET)
-            option_name *= string("[", _parse_identifier_with_url(ps), "]")
+            write(buf, "[", _parse_identifier_with_url(ps), "]")
             expectnext(ps, Tokens.RBRACKET)
         elseif accept(ps, Tokens.IDENTIFIER)
             last_name_part = val(token(ps))
             if prev_had_parens
                 startswith(last_name_part, '.') || error("Invalid option identifier $(option_name)$(last_name_part)")
             end
-            option_name *= last_name_part
+            write(buf, last_name_part)
         elseif accept(ps, Tokens.DOT)
             expectnext(ps, Tokens.LPAREN)
-            option_name *= string(".(", _parse_identifier_with_url(ps), ")")
+            write(buf, ".(", _parse_identifier_with_url(ps), ")")
             expectnext(ps, Tokens.RPAREN)
             prev_had_parens = true
         else
             break
         end
     end
-    return option_name
+    return String(take!(buf))
 end
 
 function _parse_aggregate_option(ps)

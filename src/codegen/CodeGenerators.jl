@@ -20,7 +20,10 @@ _is_repeated_field(::OneOfType) = false
 struct ResolvedProtoFile
     import_path::String
     proto_file::ProtoFile
+    implicit_imports::Set{String}
+    transitive_imports::Set{String}
 end
+ResolvedProtoFile(rel_path, p) = ResolvedProtoFile(rel_path, p, Set{String}(), Set{String}())
 
 Base.@kwdef struct Options
     include_vendored_wellknown_types::Bool = true
@@ -48,6 +51,7 @@ include("decode_methods.jl")
 include("encode_methods.jl")
 include("metadata_methods.jl")
 include("toplevel_definitions.jl")
+include("utils.jl")
 
 """
     protojl(
@@ -130,12 +134,6 @@ function protojl(
     return _protojl(relative_paths, search_directories, output_directory, options)
 end
 
-function get_upstream_dependencies!(file::ResolvedProtoFile, upstreams)
-    for path in import_paths(file)
-        push!(upstreams, path)
-    end
-end
-
 function _protojl(
     relative_paths::Union{<:AbstractString,<:AbstractVector{<:AbstractString}},
     search_directories::Union{<:AbstractString,<:AbstractVector{<:AbstractString},Nothing},
@@ -171,8 +169,16 @@ function _protojl(
         output_directory = abspath(output_directory)
     end
 
-    # TODO: Throw an error on cyclic imports?
-    sorted_files = first(_topological_sort(parsed_files, Set{String}()))
+    foreach(p->get_all_transitive_imports!(p, parsed_files), values(parsed_files))
+    # Files within the same package could use definitions from different files
+    # without fully qualifying their name -- on Julia side, we need to make sure
+    # the files are read in order that respect these implicit dependencies.
+    resolve_inter_package_references!(parsed_files, options)
+    sorted_files, cyclical_imports = _topological_sort(parsed_files)
+    !isempty(cyclical_imports) && throw(error(string(
+        "Detected cyclical dependency among following imports: $cyclical_imports, ",
+        "possibly, the individual files are resolvable, but their `package`s are not."
+    )))
     sorted_files = [parsed_files[sorted_file] for sorted_file in sorted_files]
     n = Namespaces(sorted_files, output_directory, parsed_files)
     for m in n.non_namespaced_protos

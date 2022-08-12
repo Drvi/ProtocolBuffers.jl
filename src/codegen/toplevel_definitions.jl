@@ -137,7 +137,7 @@ function Parsers.check_name_collisions(p::ProtoFile, file_map::Dict)
     for import_path in import_paths(p)
         i = file_map[import_path].proto_file
         Parsers.check_name_collisions(
-            namespace(i), julia_namespace(i), p.definitions, i.filepath, p.filepath
+            namespace(i), p.definitions, i.filepath, p.filepath
         )
     end
 end
@@ -150,8 +150,8 @@ function translate(io, rp::ResolvedProtoFile, file_map::Dict{String,ResolvedProt
     println(io, "# original file: ", p.filepath," (proto", p.preamble.isproto3 ? '3' : '2', " syntax)")
     println(io)
 
-    transitive_imports = get_all_transitive_imports(p, file_map)
-    ctx = Context(p, rp.import_path, file_map, copy(p.cyclic_definitions), Ref{String}(), transitive_imports, options)
+    # TODO: cleanup here, we probably don't need a reference to rp.transitive_imports in ctx?
+    ctx = Context(p, rp.import_path, file_map, copy(p.cyclic_definitions), Ref{String}(), rp.transitive_imports, options)
     if !is_namespaced(p)
         options.always_use_modules && println(io, "module $(replace(proto_script_name(p), ".jl" => ""))")
         options.always_use_modules && println(io)

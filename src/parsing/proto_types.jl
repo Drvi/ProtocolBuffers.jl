@@ -129,15 +129,21 @@ function unsafe_name(ps)
     end
 end
 
+function parse_label(ps)
+    return accept(ps, Tokens.REPEATED) ? REPEATED :
+           accept(ps, Tokens.OPTIONAL) ? OPTIONAL :
+           accept(ps, Tokens.REQUIRED) ? REQUIRED :
+                                         DEFAULT
+end
 # Called in parse_oneof_type, parse_message_type and parse_extend_type
 # after we handled GROUP, EXTEND, OPTION, RESERVED and EXTENSIONS
-function parse_field(ps::ParserState)
-    label = accept(ps, Tokens.REPEATED) ? REPEATED :
-            accept(ps, Tokens.OPTIONAL) ? OPTIONAL :
-            accept(ps, Tokens.REQUIRED) ? REQUIRED :
-                                          DEFAULT
+function parse_field(ps::ParserState, labelable::Bool=true)
+    label = labelable ? parse_label(ps) : Parsers.DEFAULT
     type = parse_type(ps)
+    labelable = labelable & !isa(type, MapType)
     name = unsafe_name(ps)
+    labelable && ps.is_proto3 && label == REQUIRED && (ps.errored = true) && error("Field `$(name)` has a `required` label which is not supported in proto3 syntax.")
+    labelable && !ps.is_proto3 && label == DEFAULT && (ps.errored = true) && error("Field `$(name)` is missing a label (`required`, `optional` or `repeated`), this is not supported in proto2 syntax.")
     expectnext(ps, Tokens.EQ)
     number = parse(Int, val(expectnext(ps, Tokens.DEC_INT_LIT)))
     if !(1 <= number <= MAX_FIELD_NUMBER) || (19000 <= number <= 19999)
@@ -161,14 +167,13 @@ function peek_group(ps)
 end
 
 # Can appear in parse_message_type, parse_oneof_type and parse_extend_type
-function parse_group(ps, definitions=Dict{String,Union{MessageType, EnumType, ServiceType}}(), name_prefix="")
-    label = accept(ps, Tokens.REPEATED) ? REPEATED :
-            accept(ps, Tokens.OPTIONAL) ? OPTIONAL :
-            accept(ps, Tokens.REQUIRED) ? REQUIRED :
-                                          DEFAULT
+function parse_group(ps, definitions=Dict{String,Union{MessageType, EnumType, ServiceType}}(), name_prefix="", labelable::Bool=true)
+    ps.is_proto3 && (ps.errored = true) && error("`group` fields are not supported in proto3 syntax.")
+    label = parse_label(ps)
     expectnext(ps, Tokens.GROUP)
     name = unsafe_name(ps)
-    @assert isuppercase(first(name)) "Group fields must start with a capital letter, got $name"
+    labelable && !ps.is_proto3 && label == DEFAULT && (ps.errored = true) && error("Group field `$(name)` is missing a label (`required`, `optional` or `repeated`), this is not supported in proto2 syntax.")
+    !isuppercase(first(name)) && error("Group fields must start with a capital letter, got $name")
     expectnext(ps, Tokens.EQ)
     number = parse(Int, val(expectnext(ps, Tokens.DEC_INT_LIT)))
     message = _parse_message_body(ps, name, definitions, name_prefix)
@@ -247,11 +252,11 @@ function parse_oneof_type(ps::ParserState, definitions, name_prefix="")
             _parse_option!(ps, options)
             expectnext(ps, Tokens.SEMICOLON)
         elseif (nk == Tokens.GROUP && (Tokens.isident(nnk) || Tokens.is_reserved_word(nnk)))
-            group = parse_group(ps, definitions, _dot_join(name_prefix, name))
+            group = parse_group(ps, definitions, _dot_join(name_prefix, name), false)
             push!(fields, group)
             definitions[group.type.name] = group.type
         else
-            push!(fields, parse_field(ps))
+            push!(fields, parse_field(ps, false))
         end
     end
     return OneOfType(name, fields, options)
@@ -287,9 +292,10 @@ function parse_enum_type(ps::ParserState, name_prefix="")
     end
     accept(ps, Tokens.SEMICOLON)
     if !parse(Bool, get(options, "allow_alias", "false"))
-        !allunique(element_values) && error("Duplicates in enumeration $name. You can allow multiple keys mapping to the same number with `option allow_alias = true;`")
+        !allunique(element_values) && (ps.errored = true) && error("Duplicates in enumeration $name. You can allow multiple keys mapping to the same number with `option allow_alias = true;`")
     end
     if ps.is_proto3 && first(element_values) != 0
+        ps.errored = true
         error("In proto3, enums' first element must map to zero, $name has `$(first(element_names)) = $(first(element_values))` as first element.")
     end
     # TODO: validate field_numbers

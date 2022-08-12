@@ -27,7 +27,9 @@ function match_prefix(prefix, name)
     end
 end
 
-struct ResolvingContext
+abstract type AbstractResolvingContext end
+
+struct IntraFileResolvingContext <: AbstractResolvingContext
     external_references::Set{String}
     definitions::Dict{String, Union{MessageType, EnumType, ServiceType}}
     package_prefix::String
@@ -41,8 +43,8 @@ function reference_type(def, t::ReferencedType)
     throw(error("Referenced type `$(t.name)` has unsupported type $(typeof(def))"))
 end
 
-_postprocess_reference!(type, rctx, namespace) = nothing
-function _postprocess_reference!(type::ReferencedType, rctx, namespace)
+_postprocess_reference!(type, rctx::AbstractResolvingContext, namespace) = nothing
+function _postprocess_reference!(type::ReferencedType, rctx::IntraFileResolvingContext, namespace)
     if !type.resolved
         # Get rid of the package prefix if it coincides with the package of the current file
         matched_prefix = match_prefix(rctx.package_prefix, type.name)
@@ -86,15 +88,15 @@ function _postprocess_field!(f::GroupType, rctx, namespace)
     return nothing
 end
 
-_postprocess_type!(t::EnumType, rctx::ResolvingContext) = nothing
-function _postprocess_type!(t::ServiceType, rctx::ResolvingContext)
+_postprocess_type!(t::EnumType, rctx::AbstractResolvingContext) = nothing
+function _postprocess_type!(t::ServiceType, rctx::AbstractResolvingContext)
     for rpc in t.rpcs
         _postprocess_reference!(rpc.request_type, rctx, t.name)
         _postprocess_reference!(rpc.response_type, rctx, t.name)
     end
     return nothing
 end
-function _postprocess_type!(t::MessageType, rctx::ResolvingContext)
+function _postprocess_type!(t::MessageType, rctx::AbstractResolvingContext)
     for field in t.fields
         _postprocess_field!(field, rctx, t.name)
     end
@@ -105,7 +107,7 @@ function postprocess_types!(definitions::Dict{String, Union{MessageType, EnumTyp
     # Traverse all definitions and see which of those referenced are not defined
     # in this module. Create a list of these imported definitions so that we can ignore
     # them when doing the topological sort.
-    rctx = ResolvingContext(Set{String}(), definitions, string(package_name, '.'))
+    rctx = IntraFileResolvingContext(Set{String}(), definitions, string(package_name, '.'))
     for definition in values(definitions)
         _postprocess_type!(definition, rctx)
     end
