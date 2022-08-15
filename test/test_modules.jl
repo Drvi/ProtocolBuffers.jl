@@ -214,7 +214,7 @@ end
     import .A as var"#A"
 
     include("main_pb.jl")
-    include("B/B.jl")
+    include($(repr(joinpath("B", "B.jl"))))
 
     end # module A
     """
