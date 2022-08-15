@@ -139,7 +139,7 @@ function generate_module_file(io::IO, m::ProtoModule, output_directory::Abstract
     # This is where we import internal dependencies
     if !isempty(m.internal_imports)
         print(io, "import ", string("." ^ length(namespace(m)), first(namespace(m))))
-        # We can't import the toplevel module to a leaf module if their names collapse
+        # We can't import the toplevel module to a leaf module if their names collide
         # we also need to tweak the `package_namespace` field of each imported ReferencedType
         if first(namespace(m)) == last(namespace(m))
             println(io,  " as var\"#", first(namespace(m)), '"')
