@@ -1,5 +1,4 @@
 #TODO: Cleanup!
-
 _needs_subtyping_in_containers(t::AbstractProtoType, ctx::Context) = false
 function _needs_subtyping_in_containers(t::ReferencedType, ctx::Context)
     !_is_message(t, ctx) && return false
