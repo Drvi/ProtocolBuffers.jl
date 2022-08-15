@@ -5,7 +5,7 @@ function _needs_subtyping_in_containers(t::ReferencedType, ctx::Context)
     !_is_message(t, ctx) && return false
     _is_cyclic_reference(t, ctx) && return true
     if ctx.options.parametrize_oneofs
-        return _get_referenced_type(t, ctx).has_oneof_field
+        return (_get_referenced_type(t, ctx)::MessageType).has_oneof_field
     end
     return false
 end
