@@ -1,5 +1,7 @@
 # ProtocolBuffers.jl
 
+*This repository is now archived, its contents were absorbed by the original Julia package, [ProtoBuf.jl](https://github.com/JuliaIO/ProtoBuf.jl), and all future work will happen there.*
+
 [![][docs-dev-img]][docs-dev-url]
 
 This is a Julia package that provides a compiler and a codec for Protocol Buffers.
